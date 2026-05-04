@@ -500,6 +500,13 @@ export default function SettingsModal({
             <div className="flex gap-2">
               <button
                 type="button"
+                className={`btn flex-1 ${draftSortMode === 'tmuxIndex' ? 'btn-primary' : ''}`}
+                onClick={() => setDraftSortMode('tmuxIndex')}
+              >
+                Tmux Order
+              </button>
+              <button
+                type="button"
                 className={`btn flex-1 ${draftSortMode === 'created' ? 'btn-primary' : ''}`}
                 onClick={() => setDraftSortMode('created')}
               >
@@ -521,11 +528,13 @@ export default function SettingsModal({
               </button>
             </div>
             <p className="mt-1.5 text-[10px] text-muted">
-              {draftSortMode === 'status'
-                ? 'Sessions auto-resort by status (waiting, working, unknown)'
-                : draftSortMode === 'manual'
-                  ? 'Drag sessions to reorder manually'
-                  : 'Sessions stay in creation order'}
+              {draftSortMode === 'tmuxIndex'
+                ? 'Sessions follow tmux window numbers (1, 2, 3, ...)'
+                : draftSortMode === 'status'
+                  ? 'Sessions auto-resort by status (waiting, working, unknown)'
+                  : draftSortMode === 'manual'
+                    ? 'Drag sessions to reorder manually'
+                    : 'Sessions stay in creation order'}
             </p>
           </div>
 

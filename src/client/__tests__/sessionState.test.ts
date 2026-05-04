@@ -136,6 +136,47 @@ describe('sortSessions', () => {
       'newest',
     ])
   })
+
+  test('orders by tmuxWindowIndex ascending when mode is tmuxIndex', () => {
+    // Sessions arrive out of order; tmuxWindow strings carry window IDs (@N)
+    // that are NOT a reliable sort key — only tmuxWindowIndex is.
+    const sessions = [
+      makeSession({ id: 'c', tmuxWindow: 'dev:@10', tmuxWindowIndex: 5 }),
+      makeSession({ id: 'a', tmuxWindow: 'dev:@1', tmuxWindowIndex: 1 }),
+      makeSession({ id: 'b', tmuxWindow: 'dev:@152', tmuxWindowIndex: 8 }),
+    ]
+
+    const sorted = sortSessions(sessions, { mode: 'tmuxIndex', direction: 'asc' })
+    expect(sorted.map((s) => s.id)).toEqual(['a', 'c', 'b'])
+  })
+
+  test('falls back to createdAt asc tie-break when tmuxWindowIndex is missing', () => {
+    const sessions = [
+      makeSession({
+        id: 'newer-no-index',
+        tmuxWindowIndex: undefined,
+        createdAt: new Date('2024-01-03T00:00:00.000Z').toISOString(),
+      }),
+      makeSession({
+        id: 'has-index',
+        tmuxWindowIndex: 2,
+        createdAt: new Date('2024-01-02T00:00:00.000Z').toISOString(),
+      }),
+      makeSession({
+        id: 'older-no-index',
+        tmuxWindowIndex: undefined,
+        createdAt: new Date('2024-01-01T00:00:00.000Z').toISOString(),
+      }),
+    ]
+
+    const sorted = sortSessions(sessions, { mode: 'tmuxIndex', direction: 'asc' })
+    // has-index first, then no-index entries sorted by createdAt asc
+    expect(sorted.map((s) => s.id)).toEqual([
+      'has-index',
+      'older-no-index',
+      'newer-no-index',
+    ])
+  })
 })
 
 describe('useSessionStore', () => {

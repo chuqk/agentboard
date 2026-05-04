@@ -74,12 +74,12 @@ describe('sessionRefreshWorker', () => {
     await loadWorker('refresh-filter')
 
     const listOutput = [
-      joinTmuxFields(['agentboard', '1', 'alpha|||view', '/Users/test/project|||main', '100', '1700000000', 'codex --search', '80', '24']),
-      joinTmuxFields(['agentboard', '5', BOOTSTRAP_WINDOW_NAME, '/Users/test/bootstrap', '100', '1700000004', BOOTSTRAP_WINDOW_COMMAND, '80', '24']),
-      joinTmuxFields(['agentboard', '6', BOOTSTRAP_WINDOW_NAME, '/Users/test/manual', '100', '1700000005', 'claude', '80', '24']),
-      joinTmuxFields(['agentboard-ws-foo', '2', 'ws', '/Users/test/ws', '100', '1700000001', 'bash', '80', '24']),
-      joinTmuxFields(['external-|||session', '3', 'ext', '/Users/test/ext|||path', '100', '1700000002', 'claude', '100', '40']),
-      joinTmuxFields(['other', '4', 'other', '/Users/test/other', '100', '1700000003', 'bash', '80', '24']),
+      joinTmuxFields(['agentboard', '1', 'alpha|||view', '/Users/test/project|||main', '100', '1700000000', 'codex --search', '80', '24', '1']),
+      joinTmuxFields(['agentboard', '5', BOOTSTRAP_WINDOW_NAME, '/Users/test/bootstrap', '100', '1700000004', BOOTSTRAP_WINDOW_COMMAND, '80', '24', '5']),
+      joinTmuxFields(['agentboard', '6', BOOTSTRAP_WINDOW_NAME, '/Users/test/manual', '100', '1700000005', 'claude', '80', '24', '6']),
+      joinTmuxFields(['agentboard-ws-foo', '2', 'ws', '/Users/test/ws', '100', '1700000001', 'bash', '80', '24', '2']),
+      joinTmuxFields(['external-|||session', '3', 'ext', '/Users/test/ext|||path', '100', '1700000002', 'claude', '100', '40', '3']),
+      joinTmuxFields(['other', '4', 'other', '/Users/test/other', '100', '1700000003', 'bash', '80', '24', '4']),
     ].join('\n')
 
     const captureOutputs = new Map<string, string>([
@@ -169,7 +169,7 @@ describe('sessionRefreshWorker', () => {
     await loadWorker('refresh-quoted-command')
 
     const listOutput = [
-      joinTmuxFields(['agentboard', '1', 'alpha', '/Users/test/project', '100', '1700000000', '"claude --dangerously-skip-permissions"', '80', '24']),
+      joinTmuxFields(['agentboard', '1', 'alpha', '/Users/test/project', '100', '1700000000', '"claude --dangerously-skip-permissions"', '80', '24', '1']),
     ].join('\n')
 
     bunAny.spawnSync = ((args: string[]) => {
@@ -215,8 +215,8 @@ describe('sessionRefreshWorker', () => {
     await loadWorker('format-fallback')
 
     const listOutput = [
-      joinTmuxFields(['agentboard', '0', BOOTSTRAP_WINDOW_NAME, '/Users/test/bootstrap', '100', '1700000000', 'tail', '80', '24']),
-      joinTmuxFields(['agentboard', '1', 'alpha', '/Users/test/project', '100', '1700000000', 'codex', '80', '24']),
+      joinTmuxFields(['agentboard', '0', BOOTSTRAP_WINDOW_NAME, '/Users/test/bootstrap', '100', '1700000000', 'tail', '80', '24', '0']),
+      joinTmuxFields(['agentboard', '1', 'alpha', '/Users/test/project', '100', '1700000000', 'codex', '80', '24', '1']),
     ].join('\n')
 
     let listCalls = 0
@@ -421,7 +421,7 @@ describe('sessionRefreshWorker', () => {
       await loadWorker('status-changes')
 
       const listOutput = [
-        joinTmuxFields(['agentboard', '1', 'alpha', '/Users/test/project', '100', '1700000000', 'codex', '80', '24']),
+        joinTmuxFields(['agentboard', '1', 'alpha', '/Users/test/project', '100', '1700000000', 'codex', '80', '24', '1']),
       ].join('\n')
 
       const captureSequence = [
@@ -508,7 +508,7 @@ describe('sessionRefreshWorker', () => {
       await loadWorker('status-first-observation')
 
       const listOutput = [
-        joinTmuxFields(['agentboard', '1', 'alpha', '/Users/test/project', '100', '1700000000', 'codex', '80', '24']),
+        joinTmuxFields(['agentboard', '1', 'alpha', '/Users/test/project', '100', '1700000000', 'codex', '80', '24', '1']),
       ].join('\n')
 
       const captureSequence = ['idle', 'idle']
@@ -580,7 +580,7 @@ describe('sessionRefreshWorker', () => {
       await loadWorker('status-timeout-preserve')
 
       const listOutput = [
-        joinTmuxFields(['agentboard', '1', 'alpha', '/Users/test/project', '100', '1700000000', 'codex', '80', '24']),
+        joinTmuxFields(['agentboard', '1', 'alpha', '/Users/test/project', '100', '1700000000', 'codex', '80', '24', '1']),
       ].join('\n')
       const captureSequence = ['idle', null] as const
       let captureIndex = 0

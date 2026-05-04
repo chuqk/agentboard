@@ -24,6 +24,7 @@ export interface Session {
   id: string
   name: string
   tmuxWindow: string
+  tmuxWindowIndex?: number
   projectPath: string
   status: SessionStatus
   lastActivity: string

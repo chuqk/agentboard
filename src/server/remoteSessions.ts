@@ -441,10 +441,12 @@ function parseTmuxWindows(
       ? (windowName || tmuxWindow)
       : (resolveExternalDisplayName(sessionName, windowName, config.preferWindowName) || tmuxWindow)
 
+    const parsedWindowIndex = Number.parseInt(windowIndex, 10)
     sessions.push({
       id,
       name: displayName,
       tmuxWindow,
+      tmuxWindowIndex: Number.isFinite(parsedWindowIndex) ? parsedWindowIndex : undefined,
       projectPath: (cwd || '').trim(),
       status: 'unknown',
       lastActivity,

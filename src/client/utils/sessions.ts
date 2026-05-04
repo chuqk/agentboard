@@ -23,8 +23,15 @@ export function getSessionOrderKey(session: Session): string {
 }
 
 const DEFAULT_SORT_OPTIONS: SortOptions = {
-  mode: 'created',
-  direction: 'desc',
+  mode: 'tmuxIndex',
+  direction: 'asc',
+}
+
+function getTmuxIndex(session: Session): number {
+  return typeof session.tmuxWindowIndex === 'number' &&
+    Number.isFinite(session.tmuxWindowIndex)
+    ? session.tmuxWindowIndex
+    : Number.POSITIVE_INFINITY
 }
 
 export function sortSessions(
@@ -58,6 +65,16 @@ export function sortSessions(
         SESSION_STATUS_ORDER[b.status] ?? SESSION_STATUS_ORDER.unknown
       if (aOrder !== bOrder) return aOrder - bOrder
       return Date.parse(b.lastActivity) - Date.parse(a.lastActivity)
+    }
+
+    if (mode === 'tmuxIndex') {
+      const aIdx = getTmuxIndex(a)
+      const bIdx = getTmuxIndex(b)
+      if (aIdx !== bIdx) {
+        return direction === 'desc' ? bIdx - aIdx : aIdx - bIdx
+      }
+      // Tie-break: stable createdAt asc so newcomers don't jump around
+      return Date.parse(a.createdAt) - Date.parse(b.createdAt)
     }
 
     // Sort by createdAt timestamp

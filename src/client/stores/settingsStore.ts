@@ -42,7 +42,7 @@ export function getFontFamily(fontOption: FontOption, customFontFamily: string):
   return option?.family || FONT_OPTIONS[0].family
 }
 
-export type SessionSortMode = 'status' | 'created' | 'manual'
+export type SessionSortMode = 'status' | 'created' | 'manual' | 'tmuxIndex'
 export type SessionSortDirection = 'asc' | 'desc'
 export type ShortcutModifier = 'ctrl-option' | 'ctrl-shift' | 'cmd-option' | 'cmd-shift'
 
@@ -181,7 +181,7 @@ export const useSettingsStore = create<SettingsState>()(
       addRecentPath: (path) => set((state) => ({
         recentPaths: [path, ...state.recentPaths.filter(p => p !== path)].slice(0, 5),
       })),
-      sessionSortMode: 'created',
+      sessionSortMode: 'tmuxIndex',
       setSessionSortMode: (mode) => set({ sessionSortMode: mode }),
       sessionSortDirection: 'desc',
       setSessionSortDirection: (direction) =>

@@ -1814,10 +1814,12 @@ async function handleRemoteCreate(
       return
     }
     const id = buildRemoteSessionId(host, tmuxSession, windowIndex, windowId)
+    const parsedWindowIndex = Number.parseInt(windowIndex, 10)
     const createdSession: Session = {
       id,
       name: windowName,
       tmuxWindow: `${tmuxSession}:${stableTarget}`,
+      tmuxWindowIndex: Number.isFinite(parsedWindowIndex) ? parsedWindowIndex : undefined,
       projectPath: trimmedPath,
       status: 'unknown',
       lastActivity: new Date(now).toISOString(),

@@ -38,6 +38,7 @@ const BATCH_WINDOW_FORMAT = buildTmuxFormat([
   '#{pane_start_command}',
   '#{pane_width}',
   '#{pane_height}',
+  '#{window_index}',
 ])
 const BATCH_WINDOW_FORMAT_FALLBACK = buildTmuxFormat([
   '#{session_name}',
@@ -49,6 +50,7 @@ const BATCH_WINDOW_FORMAT_FALLBACK = buildTmuxFormat([
   '#{pane_current_command}',
   '#{pane_width}',
   '#{pane_height}',
+  '#{window_index}',
 ])
 
 const LAST_USER_MESSAGE_SCROLLBACK_LINES = 200
@@ -63,6 +65,7 @@ interface WindowData {
   command: string
   width: number
   height: number
+  windowIndex: number
 }
 
 // Cache persists across worker invocations.
@@ -211,10 +214,11 @@ function listAllWindowData(): WindowData[] {
 
   return splitTmuxLines(output)
     .flatMap((line) => {
-      const parts = splitTmuxFields(line, 9)
+      const parts = splitTmuxFields(line, 10)
       if (!parts) {
         return []
       }
+      const parsedIndex = Number.parseInt(parts[9] ?? '', 10)
       return {
         sessionName: parts[0] ?? '',
         windowId: parts[1] ?? '',
@@ -225,6 +229,7 @@ function listAllWindowData(): WindowData[] {
         command: normalizePaneStartCommand(parts[6] ?? ''),
         width: Number.parseInt(parts[7] ?? '80', 10) || 80,
         height: Number.parseInt(parts[8] ?? '24', 10) || 24,
+        windowIndex: Number.isFinite(parsedIndex) ? parsedIndex : Number.POSITIVE_INFINITY,
       }
     })
 }
@@ -336,6 +341,7 @@ function listAllWindows(managedSession: string, discoverPrefixes: string[]): Ses
       id: tmuxWindow,
       name: displayName,
       tmuxWindow,
+      tmuxWindowIndex: Number.isFinite(window.windowIndex) ? window.windowIndex : undefined,
       projectPath: normalizedPath || window.path,
       status,
       lastActivity: new Date(lastChanged).toISOString(),

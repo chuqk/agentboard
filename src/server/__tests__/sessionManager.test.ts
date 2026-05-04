@@ -184,6 +184,7 @@ function createTmuxRunner(sessions: SessionState[], baseIndex = 0) {
             window.activity,
             window.creation ?? window.activity,
             window.command,
+            window.index,
           ])
         )
         .join('\n')
@@ -849,6 +850,7 @@ describe('SessionManager', () => {
             '1700000000',
             '1700000000',
             'tail',
+            '0',
           ]),
           buildTmuxRow([
             '1',
@@ -857,6 +859,7 @@ describe('SessionManager', () => {
             '1700000000',
             '1700000000',
             'claude',
+            '1',
           ]),
         ].join('\n')
       }

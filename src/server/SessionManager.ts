@@ -25,6 +25,7 @@ import type { Session, SessionStatus } from '../shared/types'
 
 interface WindowInfo {
   id: string
+  index: number
   name: string
   path: string
   activity: number
@@ -59,6 +60,7 @@ const WINDOW_LIST_FORMAT = buildTmuxFormat([
   '#{window_activity}',
   '#{window_creation_time}',
   '#{pane_start_command}',
+  '#{window_index}',
 ])
 const WINDOW_LIST_FORMAT_FALLBACK = buildTmuxFormat([
   '#{window_id}',
@@ -67,6 +69,7 @@ const WINDOW_LIST_FORMAT_FALLBACK = buildTmuxFormat([
   '#{window_activity}',
   '#{window_activity}',
   '#{pane_current_command}',
+  '#{window_index}',
 ])
 const WINDOW_INFO_FORMAT = buildTmuxFormat([
   '#{window_name}',
@@ -582,6 +585,7 @@ export class SessionManager {
           id: `${sessionName}:${window.id}`,
           name: displayName,
           tmuxWindow,
+          tmuxWindowIndex: Number.isFinite(window.index) ? window.index : undefined,
           projectPath: normalizedPath || window.path,
           status,
           lastActivity: new Date(lastChanged).toISOString(),
@@ -722,17 +726,19 @@ export class SessionManager {
 }
 
 function parseWindow(line: string): WindowInfo | null {
-  const parts = splitTmuxFields(line, 6)
+  const parts = splitTmuxFields(line, 7)
   if (!parts) {
     return null
   }
 
-  const [id, name, panePath, activityRaw, creationRaw, command] = parts
+  const [id, name, panePath, activityRaw, creationRaw, command, indexRaw] = parts
   const activity = Number.parseInt(activityRaw || '0', 10)
   const creation = Number.parseInt(creationRaw || '0', 10)
+  const index = Number.parseInt(indexRaw || '', 10)
 
   return {
     id: id || '',
+    index: Number.isFinite(index) ? index : Number.POSITIVE_INFINITY,
     name: name || 'unknown',
     path: panePath || '',
     activity: Number.isNaN(activity) ? 0 : activity,
