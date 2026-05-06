@@ -150,6 +150,19 @@ describe('sortSessions', () => {
     expect(sorted.map((s) => s.id)).toEqual(['a', 'c', 'b'])
   })
 
+  test('tmuxIndex mode ignores direction and always sorts ascending', () => {
+    const sessions = [
+      makeSession({ id: 'c', tmuxWindowIndex: 5 }),
+      makeSession({ id: 'a', tmuxWindowIndex: 1 }),
+      makeSession({ id: 'b', tmuxWindowIndex: 8 }),
+    ]
+
+    // Even with direction: 'desc' (e.g. carried over from a previous mode),
+    // the result mirrors the tmux layout in ascending order.
+    const sorted = sortSessions(sessions, { mode: 'tmuxIndex', direction: 'desc' })
+    expect(sorted.map((s) => s.id)).toEqual(['a', 'c', 'b'])
+  })
+
   test('falls back to createdAt asc tie-break when tmuxWindowIndex is missing', () => {
     const sessions = [
       makeSession({

@@ -68,11 +68,11 @@ export function sortSessions(
     }
 
     if (mode === 'tmuxIndex') {
+      // Always ascending: this mode exists to mirror the tmux window layout,
+      // and descending would invert that ordering — defeating the purpose.
       const aIdx = getTmuxIndex(a)
       const bIdx = getTmuxIndex(b)
-      if (aIdx !== bIdx) {
-        return direction === 'desc' ? bIdx - aIdx : aIdx - bIdx
-      }
+      if (aIdx !== bIdx) return aIdx - bIdx
       // Tie-break: stable createdAt asc so newcomers don't jump around
       return Date.parse(a.createdAt) - Date.parse(b.createdAt)
     }
