@@ -926,14 +926,25 @@ export default function Terminal({
     }
   }, [containerRef, isiOS, isSelectingText])
 
-  // Use session names as mobile tab labels only when AGENTBOARD_PREFER_WINDOW_NAME is
-  // enabled AND every session has a distinct, non-empty name. Otherwise tabs would
-  // repeat the same label and numeric indices remain the better signal.
-  const mobileTabsUseNames = useMemo(() => {
-    if (!preferWindowName) return false
-    if (sessions.length === 0) return false
-    const names = sessions.map((s) => s.name.trim()).filter(Boolean)
-    return names.length === sessions.length && new Set(names).size === sessions.length
+  // Per-session label for mobile tabs: a session gets its name as the label only when
+  // AGENTBOARD_PREFER_WINDOW_NAME is enabled AND its name is non-empty AND unique among
+  // visible sessions. Sessions whose name collides (e.g. tmux automatic-rename collapses
+  // multiple windows to the same process name) fall back to the numeric index so the
+  // ambiguous ones stay distinguishable while distinct ones still show their name.
+  const mobileTabNameById = useMemo(() => {
+    const result = new Map<string, string>()
+    if (!preferWindowName) return result
+    const counts = new Map<string, number>()
+    for (const s of sessions) {
+      const trimmed = s.name.trim()
+      if (!trimmed) continue
+      counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1)
+    }
+    for (const s of sessions) {
+      const trimmed = s.name.trim()
+      if (trimmed && counts.get(trimmed) === 1) result.set(s.id, trimmed)
+    }
+    return result
   }, [preferWindowName, sessions])
 
   return (
@@ -1117,18 +1128,16 @@ export default function Terminal({
           >
             {sessions.map((s, index) => {
               const isActive = s.id === session.id
-              // Use session name as the label when all sessions have a distinct,
-              // non-empty name (e.g. with AGENTBOARD_PREFER_WINDOW_NAME=true and
-              // user-named windows). Otherwise fall back to numeric index — names
-              // would just repeat (e.g. all `dev`) and add no signal.
-              const label = mobileTabsUseNames ? s.name.trim() : index + 1
+              const nameLabel = mobileTabNameById.get(s.id)
+              const useName = nameLabel !== undefined
+              const label = useName ? nameLabel : index + 1
               return (
                 <button
                   key={s.id}
                   type="button"
                   className={`
                     flex items-center justify-center shrink-0 snap-start
-                    h-8 ${mobileTabsUseNames ? 'min-w-[2rem] px-2.5 max-w-[8rem] truncate' : 'w-8'}
+                    h-8 ${useName ? 'min-w-[2rem] px-2.5 max-w-[8rem] truncate' : 'w-8'}
                     text-sm font-extrabold rounded-lg
                     active:scale-95 transition-all duration-75
                     select-none touch-manipulation
@@ -1138,7 +1147,7 @@ export default function Terminal({
                     triggerHaptic()
                     onSelectSession(s.id)
                   }}
-                  title={mobileTabsUseNames ? s.name : undefined}
+                  title={useName ? s.name : undefined}
                 >
                   {label}
                 </button>

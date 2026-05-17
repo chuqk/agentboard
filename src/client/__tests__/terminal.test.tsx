@@ -808,6 +808,64 @@ describe('Terminal', () => {
     })
   })
 
+  test('mobile session switcher falls back to numeric label only for colliding names', () => {
+    if (globalAny.window) {
+      globalAny.window.matchMedia = (() => ({
+        matches: true,
+        media: '',
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      })) as unknown as typeof window.matchMedia
+    }
+    useSessionStore.setState({ preferWindowName: true })
+
+    const collidingA: Session = { ...baseSession, id: 'session-dup-a', name: 'dup' }
+    const collidingB: Session = { ...secondSession, id: 'session-dup-b', name: 'dup' }
+    const unique: Session = { ...baseSession, id: 'session-unique', name: 'unique' }
+
+    const { createNodeMock } = createContainerMock()
+    let renderer!: TestRenderer.ReactTestRenderer
+
+    act(() => {
+      renderer = TestRenderer.create(
+        <Terminal
+          session={collidingA}
+          sessions={[collidingA, collidingB, unique]}
+          connectionStatus="connected"
+          sendMessage={() => {}}
+          subscribe={() => () => {}}
+          onClose={() => {}}
+          onSelectSession={() => {}}
+          onNewSession={() => {}}
+          onKillSession={() => {}}
+          onRenameSession={() => {}}
+          onResumeSession={() => {}}
+          onOpenSettings={() => {}}
+        />,
+        { createNodeMock }
+      )
+    })
+
+    const labels = renderer.root
+      .findAllByType('button')
+      .map((button) => button.props.children)
+      .filter((child) => child === 1 || child === 2 || child === 3 || child === 'dup' || child === 'unique')
+
+    expect(labels).toContain(1)
+    expect(labels).toContain(2)
+    expect(labels).toContain('unique')
+    expect(labels).not.toContain('dup')
+    expect(labels).not.toContain(3)
+
+    act(() => {
+      renderer.unmount()
+    })
+  })
+
   test('renders hibernating placeholder and wakes without attaching terminal', async () => {
     const resumeCalls: string[] = []
     const sentMessages: unknown[] = []
