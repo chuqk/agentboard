@@ -157,6 +157,9 @@ interface SettingsState {
   setSoundOnPermission: (enabled: boolean) => void
   soundOnIdle: boolean
   setSoundOnIdle: (enabled: boolean) => void
+  // Screen wake lock – prevent device auto-lock while agentboard is visible.
+  keepScreenAwake: boolean
+  setKeepScreenAwake: (enabled: boolean) => void
 
   // Command presets
   commandPresets: CommandPreset[]
@@ -226,6 +229,8 @@ export const useSettingsStore = create<SettingsState>()(
       setSoundOnPermission: (enabled) => set({ soundOnPermission: enabled }),
       soundOnIdle: false,
       setSoundOnIdle: (enabled) => set({ soundOnIdle: enabled }),
+      keepScreenAwake: true,
+      setKeepScreenAwake: (enabled) => set({ keepScreenAwake: enabled }),
 
       // Command presets
       commandPresets: DEFAULT_PRESETS,

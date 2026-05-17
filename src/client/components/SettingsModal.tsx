@@ -85,6 +85,8 @@ export default function SettingsModal({
   const setSoundOnPermission = useSettingsStore((state) => state.setSoundOnPermission)
   const soundOnIdle = useSettingsStore((state) => state.soundOnIdle)
   const setSoundOnIdle = useSettingsStore((state) => state.setSoundOnIdle)
+  const keepScreenAwake = useSettingsStore((state) => state.keepScreenAwake)
+  const setKeepScreenAwake = useSettingsStore((state) => state.setKeepScreenAwake)
 
   const [draftDir, setDraftDir] = useState(defaultProjectDir)
   const [draftPresets, setDraftPresets] = useState<CommandPreset[]>(commandPresets)
@@ -113,6 +115,7 @@ export default function SettingsModal({
   const [draftTheme, setDraftTheme] = useState<Theme>(theme)
   const [draftSoundOnPermission, setDraftSoundOnPermission] = useState(soundOnPermission)
   const [draftSoundOnIdle, setDraftSoundOnIdle] = useState(soundOnIdle)
+  const [draftKeepScreenAwake, setDraftKeepScreenAwake] = useState(keepScreenAwake)
 
   // Server-side settings (fetched from API)
   const [tmuxMouseMode, setTmuxMouseMode] = useState(true)
@@ -152,6 +155,7 @@ export default function SettingsModal({
       setDraftTheme(theme)
       setDraftSoundOnPermission(soundOnPermission)
       setDraftSoundOnIdle(soundOnIdle)
+      setDraftKeepScreenAwake(keepScreenAwake)
       setShowAddForm(false)
       setNewLabel('')
       setNewCommand('')
@@ -213,6 +217,7 @@ export default function SettingsModal({
     theme,
     soundOnPermission,
     soundOnIdle,
+    keepScreenAwake,
     isOpen,
   ])
 
@@ -257,6 +262,7 @@ export default function SettingsModal({
     setTheme(draftTheme)
     setSoundOnPermission(draftSoundOnPermission)
     setSoundOnIdle(draftSoundOnIdle)
+    setKeepScreenAwake(draftKeepScreenAwake)
     onClose({ webglChanged })
   }
 
@@ -680,6 +686,25 @@ export default function SettingsModal({
                   }}
                 />
               </div>
+            </div>
+          </div>
+
+          <div className="border-t border-border pt-4 space-y-3">
+            <label className="mb-1 block text-xs text-secondary">
+              Device
+            </label>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="text-sm text-primary">Keep Screen Awake</div>
+                <div className="text-[10px] text-muted">
+                  Prevent device auto-lock while agentboard is open. Requires
+                  iOS 16.4+ on iPhone/iPad. Resumes when the page is in view.
+                </div>
+              </div>
+              <Switch
+                checked={draftKeepScreenAwake}
+                onCheckedChange={setDraftKeepScreenAwake}
+              />
             </div>
           </div>
 

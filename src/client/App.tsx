@@ -17,6 +17,7 @@ import { useThemeStore } from './stores/themeStore'
 import { useWebSocket } from './hooks/useWebSocket'
 import { invalidateSnapshotCache } from './hooks/useTerminal'
 import { useVisualViewport } from './hooks/useVisualViewport'
+import { useWakeLock } from './hooks/useWakeLock'
 import { sortSessions } from './utils/sessions'
 import { flushSync } from 'react-dom'
 import { setClientLogLevel } from './utils/clientLog'
@@ -111,12 +112,16 @@ export default function App() {
   const hostFilters = useSettingsStore((state) => state.hostFilters)
   const soundOnPermission = useSettingsStore((state) => state.soundOnPermission)
   const soundOnIdle = useSettingsStore((state) => state.soundOnIdle)
+  const keepScreenAwake = useSettingsStore((state) => state.keepScreenAwake)
 
   const connectionEpoch = useSessionStore((state) => state.connectionEpoch)
   const { sendMessage, subscribe, getConnectionEpoch } = useWebSocket()
 
   // Handle mobile keyboard viewport adjustments
   useVisualViewport()
+
+  // Prevent device auto-lock while agentboard is visible (opt-out via Settings).
+  useWakeLock(keepScreenAwake)
 
   // Prime audio on user interaction. Persistent listener (not once) because Safari
   // suspends AudioContext after sleep/wake and needs a fresh gesture to resume.
