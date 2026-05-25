@@ -10,6 +10,7 @@ import type { Session } from '@shared/types'
 import { CornerDownLeftIcon } from '@untitledui-icons/react/line'
 import DPad from './DPad'
 import NumPad from './NumPad'
+import TabKey from './TabKey'
 import { isIOSDevice } from '../utils/device'
 
 interface SessionInfo {
@@ -69,10 +70,10 @@ const KeyboardIcon = (
   </svg>
 )
 
-// Keys before the numpad (Ctrl toggle handled separately)
+// Keys before the numpad (Ctrl toggle handled separately).
+// `tab` is provided by <TabKey /> which adds a long-press popup for Shift+Tab.
 const CONTROL_KEYS_LEFT: ControlKey[] = [
   { label: 'esc', key: '\x1b' },
-  { label: 'tab', key: '\t' },
 ]
 
 // Keys after the d-pad
@@ -469,6 +470,14 @@ export default function TerminalControls({
             {control.label}
           </button>
         ))}
+
+        {/* Tab key (short tap) / Shift+Tab (long-press popup) */}
+        <TabKey
+          onSendKey={handleSendKeyWithCtrl}
+          disabled={disabled}
+          onRefocus={onRefocus}
+          isKeyboardVisible={isKeyboardVisible}
+        />
 
         {/* NumPad for number input */}
         <NumPad
