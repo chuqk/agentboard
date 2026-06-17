@@ -37,6 +37,7 @@ function makeAgentSession(overrides: Partial<AgentSession> = {}): AgentSession {
 beforeEach(() => {
   useSessionStore.setState({
     sessions: [],
+    otherSessions: [],
     agentSessions: { active: [], hibernating: [], history: [] },
     agentSessionsEpoch: -1,
     selectedSessionId: null,
@@ -173,6 +174,33 @@ describe('useSessionStore', () => {
     useSessionStore.getState().setSessions(sessions)
 
     expect(useSessionStore.getState().selectedSessionId).toBe('keep')
+  })
+
+  test('keeps an opened "other" session selected when it is absent from the main list', () => {
+    // An undiscovered session opened from the "Other" menu lives in otherSessions
+    // and is intentionally NOT part of the broadcast `sessions` list.
+    useSessionStore.setState({
+      otherSessions: [makeSession({ id: 'other-1', source: 'undiscovered' })],
+      selectedSessionId: 'other-1',
+    })
+
+    useSessionStore.getState().setSessions([
+      makeSession({ id: 'dev-1', status: 'working' }),
+    ])
+
+    // It must NOT snap back to the first discovered session.
+    expect(useSessionStore.getState().selectedSessionId).toBe('other-1')
+  })
+
+  test('setOtherSessions stores the on-demand list without touching sessions', () => {
+    useSessionStore.getState().setSessions([makeSession({ id: 'dev-1' })])
+    useSessionStore.getState().setOtherSessions([
+      makeSession({ id: 'other-1', source: 'undiscovered' }),
+    ])
+
+    const state = useSessionStore.getState()
+    expect(state.otherSessions.map((s) => s.id)).toEqual(['other-1'])
+    expect(state.sessions.map((s) => s.id)).toEqual(['dev-1'])
   })
 
   test('updates a session in place', () => {

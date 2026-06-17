@@ -88,6 +88,12 @@ export default function App() {
   const setRemoteAllowAttach = useSessionStore((state) => state.setRemoteAllowAttach)
   const setHostLabel = useSessionStore((state) => state.setHostLabel)
   const setPreferWindowName = useSessionStore((state) => state.setPreferWindowName)
+  const otherSessions = useSessionStore((state) => state.otherSessions)
+  const setOtherSessions = useSessionStore((state) => state.setOtherSessions)
+  const discoverPrefixesActive = useSessionStore((state) => state.discoverPrefixesActive)
+  const setDiscoverPrefixesActive = useSessionStore(
+    (state) => state.setDiscoverPrefixesActive
+  )
   const hostStatuses = useSessionStore((state) => state.hostStatuses)
   const remoteAllowControl = useSessionStore((state) => state.remoteAllowControl)
   const hostLabel = useSessionStore((state) => state.hostLabel)
@@ -289,6 +295,7 @@ export default function App() {
         setRemoteAllowAttach(message.remoteAllowAttach)
         setHostLabel(message.hostLabel)
         setPreferWindowName(message.preferWindowName)
+        setDiscoverPrefixesActive(message.discoverPrefixesActive)
         if (message.clientLogLevel) {
           setClientLogLevel(message.clientLogLevel)
         }
@@ -498,15 +505,27 @@ export default function App() {
     setRemoteAllowAttach,
     setHostLabel,
     setPreferWindowName,
+    setDiscoverPrefixesActive,
     subscribe,
     updateSession,
   ])
 
   const selectedSession = useMemo(() => {
     return (
-      sessions.find((session) => session.id === selectedSessionId) || null
+      sessions.find((session) => session.id === selectedSessionId) ||
+      // Fall back to an on-demand "other" session so opening one streams in the
+      // terminal even though it's intentionally absent from the main list.
+      otherSessions.find((session) => session.id === selectedSessionId) ||
+      null
     )
-  }, [selectedSessionId, sessions])
+  }, [selectedSessionId, sessions, otherSessions])
+
+  const loadOtherSessions = useCallback(() => {
+    fetch('/api/sessions/other')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((list: Session[]) => setOtherSessions(Array.isArray(list) ? list : []))
+      .catch(() => {})
+  }, [setOtherSessions])
   const hibernatingAgentSessions = agentSessions.hibernating ?? []
   const historyAgentSessions = agentSessions.history ?? []
   const filteredHibernatingSessions = useMemo(
@@ -632,12 +651,18 @@ export default function App() {
     if (filteredSortedSessions.some((session) => session.id === selectedSessionId)) {
       return
     }
+    // An opened "other" (undiscovered) session is intentionally not in the main
+    // list; keep it selected instead of snapping to the first discovered one.
+    if (otherSessions.some((session) => session.id === selectedSessionId)) {
+      return
+    }
     if (selectFirstVisibleTarget()) return
     setSelectedSessionId(null)
   }, [
     hasLoaded,
     selectedSessionId,
     selectedHibernatingSessionId,
+    otherSessions,
     selectFirstVisibleTarget,
     setSelectedSessionId,
   ])
@@ -924,6 +949,9 @@ export default function App() {
           sessions={sessions}
           hibernatingSessions={hibernatingAgentSessions}
           historySessions={historyAgentSessions}
+          otherSessions={otherSessions}
+          showOtherSessions={discoverPrefixesActive}
+          onLoadOtherSessions={loadOtherSessions}
           selectedSessionId={selectedSessionId}
           selectedHibernatingSessionId={selectedHibernatingSessionId}
           onSelect={setSelectedSessionId}
@@ -952,6 +980,9 @@ export default function App() {
         sessions={filteredSortedSessions}
         hibernatingSession={selectedHibernatingSession}
         hibernatingSessions={hibernatingAgentSessions}
+        otherSessions={otherSessions}
+        showOtherSessions={discoverPrefixesActive}
+        onLoadOtherSessions={loadOtherSessions}
         connectionStatus={connectionStatus}
         connectionEpoch={connectionEpoch}
         sendMessage={sendMessage}

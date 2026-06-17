@@ -4,7 +4,7 @@ export const HISTORY_MAX_AGE_MAX_HOURS = 168 // 7 days
 
 export type SessionStatus = 'working' | 'waiting' | 'permission' | 'unknown'
 
-export type SessionSource = 'managed' | 'external'
+export type SessionSource = 'managed' | 'external' | 'undiscovered'
 export type AgentType = 'claude' | 'claude-rp' | 'codex' | 'pi'
 export type SessionKillSource =
   | 'keyboard_shortcut'
@@ -109,7 +109,7 @@ export type ServerMessage =
     }
   | { type: 'terminal-ready'; sessionId: string }
   | { type: 'tmux-copy-mode-status'; sessionId: string; inCopyMode: boolean }
-  | { type: 'server-config'; remoteAllowControl: boolean; remoteAllowAttach: boolean; hostLabel: string; preferWindowName: boolean; clientLogLevel?: string }
+  | { type: 'server-config'; remoteAllowControl: boolean; remoteAllowAttach: boolean; hostLabel: string; preferWindowName: boolean; discoverPrefixesActive: boolean; clientLogLevel?: string }
   | { type: 'pong'; seq?: number }
   | { type: 'error'; message: string }
   | { type: 'kill-failed'; sessionId: string; message: string }

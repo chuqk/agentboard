@@ -51,6 +51,11 @@ export type ConnectionStatus =
 
 interface SessionState {
   sessions: Session[]
+  // On-demand "other" (undiscovered) sessions fetched from /api/sessions/other.
+  // Kept separate from `sessions` so they never appear in the main list, but the
+  // selection guard and selected-session resolution consult them so an opened
+  // "other" session can stream in the terminal without being auto-deselected.
+  otherSessions: Session[]
   agentSessions: { active: AgentSession[]; hibernating: AgentSession[]; history: AgentSession[] }
   agentSessionsEpoch: number
   hostStatuses: HostStatus[]
@@ -63,6 +68,7 @@ interface SessionState {
   connectionError: string | null
   connectionEpoch: number
   setSessions: (sessions: Session[]) => void
+  setOtherSessions: (sessions: Session[]) => void
   setAgentSessions: (
     active: AgentSession[],
     hibernating: AgentSession[],
@@ -84,6 +90,10 @@ interface SessionState {
   setHostLabel: (value: string | null) => void
   preferWindowName: boolean
   setPreferWindowName: (value: boolean) => void
+  // Whether DISCOVER_PREFIXES is configured on the server (gates the "Other
+  // sessions" menu — when no prefixes are set, every session is already shown).
+  discoverPrefixesActive: boolean
+  setDiscoverPrefixesActive: (value: boolean) => void
   // Mark a session as exiting (preserves data for exit animation)
   markSessionExiting: (sessionId: string) => void
   // Clear a session from exiting state (after animation completes)
@@ -102,6 +112,7 @@ export const useSessionStore = create<SessionState>()(
   persist(
     (set, get) => ({
       sessions: [],
+      otherSessions: [],
       agentSessions: { active: [], hibernating: [], history: [] },
       agentSessionsEpoch: -1,
       hostStatuses: [],
@@ -116,6 +127,7 @@ export const useSessionStore = create<SessionState>()(
       remoteAllowAttach: false,
       hostLabel: null,
       preferWindowName: false,
+      discoverPrefixesActive: false,
       setSessions: (sessions) => {
         const state = get()
         const selected = state.selectedSessionId
@@ -140,7 +152,11 @@ export const useSessionStore = create<SessionState>()(
         let newSelectedId: string | null = selected
         if (
           selected !== null &&
-          !sessions.some((session) => session.id === selected)
+          !sessions.some((session) => session.id === selected) &&
+          // An opened "other" (undiscovered) session is intentionally absent
+          // from `sessions`; keep it selected so the terminal stays attached
+          // instead of snapping back to the first discovered session.
+          !state.otherSessions.some((session) => session.id === selected)
         ) {
           if (selectedHibernating === null) {
             // Auto-select first session (by sort order) when current one is deleted
@@ -176,6 +192,7 @@ export const useSessionStore = create<SessionState>()(
           })
         }
       },
+      setOtherSessions: (otherSessions) => set({ otherSessions }),
       setAgentSessions: (active, hibernating, history) =>
         set((state) => {
           const nextAgentSessions = {
@@ -228,6 +245,7 @@ export const useSessionStore = create<SessionState>()(
       setRemoteAllowAttach: (value) => set({ remoteAllowAttach: value }),
       setHostLabel: (value) => set({ hostLabel: value }),
       setPreferWindowName: (value) => set({ preferWindowName: value }),
+      setDiscoverPrefixesActive: (value) => set({ discoverPrefixesActive: value }),
       markSessionExiting: (sessionId) => {
         const session = get().sessions.find((s) => s.id === sessionId)
         if (session) {

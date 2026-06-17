@@ -15,6 +15,9 @@ interface SessionDrawerProps {
   sessions: Session[]
   hibernatingSessions?: AgentSession[]
   historySessions?: AgentSession[]
+  otherSessions?: Session[]
+  showOtherSessions?: boolean
+  onLoadOtherSessions?: () => void
   selectedSessionId: string | null
   selectedHibernatingSessionId?: string | null
   onSelect: (sessionId: string) => void
@@ -34,6 +37,9 @@ export default function SessionDrawer({
   sessions,
   hibernatingSessions = [],
   historySessions = [],
+  otherSessions = [],
+  showOtherSessions = false,
+  onLoadOtherSessions,
   selectedSessionId,
   selectedHibernatingSessionId = null,
   onSelect,
@@ -159,6 +165,9 @@ export default function SessionDrawer({
           sessions={sessions}
           hibernatingSessions={hibernatingSessions}
           historySessions={historySessions}
+          otherSessions={otherSessions}
+          showOtherSessions={showOtherSessions}
+          onLoadOtherSessions={onLoadOtherSessions}
           selectedSessionId={selectedSessionId}
           selectedHibernatingSessionId={selectedHibernatingSessionId}
           onSelect={handleSelect}

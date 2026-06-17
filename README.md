@@ -170,7 +170,7 @@ AGENTBOARD_LOG_WATCH_MODE=watch
 
 > **Security note:** Agentboard has no built-in authentication. Anyone who can reach the server has full access to your terminal sessions, including the ability to run commands as your user. The default localhost binding is safe. Tailscale provides network-level auth for remote access. Avoid setting `HOSTNAME=0.0.0.0` on untrusted networks (public WiFi, shared LANs) without an additional access control layer.
 
-`DISCOVER_PREFIXES` lets you discover and control windows from other tmux sessions. If unset, all sessions except the managed one are discovered.
+`DISCOVER_PREFIXES` lets you discover and control windows from other tmux sessions. If unset, all sessions except the managed one are discovered. When set, tmux sessions that don't match a prefix are kept out of the main list to reduce clutter, but they remain reachable on demand: expand the **Other** section at the bottom of the sidebar (or the mobile drawer) to list and open them read-only. They are fetched lazily on expand and never join the main Active list, so opening one (e.g. after a reboot) streams in the terminal without changing your normal view.
 
 `PRUNE_WS_SESSIONS` removes orphaned `agentboard-ws-*` tmux sessions on startup (set to `false` to disable).
 

@@ -33,6 +33,9 @@ interface TerminalProps {
   hibernatingSession?: AgentSession | null
   hibernatingSessions?: AgentSession[]
   historySessions?: AgentSession[]
+  otherSessions?: Session[]
+  showOtherSessions?: boolean
+  onLoadOtherSessions?: () => void
   connectionStatus: ConnectionStatus
   connectionEpoch?: number
   sendMessage: SendClientMessage
@@ -91,6 +94,9 @@ export default function Terminal({
   hibernatingSession = null,
   hibernatingSessions = [],
   historySessions = [],
+  otherSessions = [],
+  showOtherSessions = false,
+  onLoadOtherSessions,
   connectionStatus,
   connectionEpoch = 0,
   sendMessage,
@@ -1291,6 +1297,9 @@ export default function Terminal({
           sessions={sessions}
           hibernatingSessions={hibernatingSessions}
           historySessions={historySessions}
+          otherSessions={otherSessions}
+          showOtherSessions={showOtherSessions}
+          onLoadOtherSessions={onLoadOtherSessions}
           selectedSessionId={session?.id ?? null}
           selectedHibernatingSessionId={hibernatingSession?.sessionId ?? null}
           onSelect={onSelectSession}

@@ -2075,4 +2075,92 @@ describe('SessionManager', () => {
     expect(second.status).toBe('waiting')
     expect(second.lastActivity).toBe(first.lastActivity)
   })
+
+  test('listUndiscoveredWindows returns only sessions outside discoverPrefixes', () => {
+    const managedSession = 'agentboard'
+    const runner = createTmuxRunner(
+      [
+        {
+          name: managedSession,
+          windows: [
+            { id: '1', index: 1, name: 'base', path: '/tmp/base', activity: 0, command: 'claude' },
+          ],
+        },
+        {
+          name: 'dev-foo',
+          windows: [
+            { id: '2', index: 2, name: 'discovered', path: '/tmp/dev', activity: 0, command: 'claude' },
+          ],
+        },
+        {
+          name: 'random-thing',
+          windows: [
+            { id: '3', index: 3, name: 'hidden', path: '/tmp/random', activity: 0, command: 'codex' },
+          ],
+        },
+        {
+          name: `${managedSession}-ws-orphan`,
+          windows: [
+            { id: '9', index: 9, name: 'ws', path: '/tmp/ws', activity: 0, command: '' },
+          ],
+        },
+      ],
+      1
+    )
+
+    const manager = new SessionManager(managedSession, {
+      runTmux: runner.runTmux,
+      capturePaneContent: () => makePaneCapture(''),
+      now: () => 1700000000000,
+    })
+
+    const originalPrefixes = config.discoverPrefixes
+    config.discoverPrefixes = ['dev']
+    try {
+      const other = manager.listUndiscoveredWindows()
+
+      // Only the non-prefixed, non-managed, non-ws session is returned.
+      expect(other).toHaveLength(1)
+      expect(other[0]?.tmuxWindow).toBe('random-thing:3')
+      expect(other[0]?.source).toBe('undiscovered')
+
+      // None of the discovered/managed/ws windows leak into the result.
+      expect(other.some((s) => s.tmuxWindow === `${managedSession}:1`)).toBe(false)
+      expect(other.some((s) => s.tmuxWindow === 'dev-foo:2')).toBe(false)
+      expect(other.some((s) => s.tmuxWindow === `${managedSession}-ws-orphan:9`)).toBe(false)
+    } finally {
+      config.discoverPrefixes = originalPrefixes
+    }
+  })
+
+  test('listUndiscoveredWindows returns [] when no prefixes are configured', () => {
+    const managedSession = 'agentboard'
+    const runner = createTmuxRunner(
+      [
+        { name: managedSession, windows: [
+          { id: '1', index: 1, name: 'base', path: '/tmp/base', activity: 0, command: 'claude' },
+        ] },
+        { name: 'random-thing', windows: [
+          { id: '3', index: 3, name: 'hidden', path: '/tmp/random', activity: 0, command: 'codex' },
+        ] },
+      ],
+      1
+    )
+
+    const manager = new SessionManager(managedSession, {
+      runTmux: runner.runTmux,
+      capturePaneContent: () => makePaneCapture(''),
+      now: () => 1700000000000,
+    })
+
+    const originalPrefixes = config.discoverPrefixes
+    config.discoverPrefixes = []
+    try {
+      // With no prefixes, everything non-managed is already discovered as
+      // external, so nothing is "undiscovered".
+      expect(manager.listUndiscoveredWindows()).toEqual([])
+    } finally {
+      config.discoverPrefixes = originalPrefixes
+    }
+  })
 })

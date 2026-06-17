@@ -11,11 +11,18 @@ export interface RegistryEvents {
 
 export class SessionRegistry extends EventEmitter {
   private sessions: Map<string, Session>
+  // Sessions surfaced on demand via the "Other sessions" menu (undiscovered
+  // tmux sessions). They are kept OUT of getAll()/broadcast — so they never
+  // appear in the main list — but are consulted by get() so terminal-attach can
+  // resolve them. Populated lazily by the /api/sessions/other route and never
+  // wiped by replaceSessions().
+  private transientSessions: Map<string, Session>
   private agentSessions: { active: AgentSession[]; hibernating: AgentSession[]; history: AgentSession[] }
 
   constructor() {
     super()
     this.sessions = new Map<string, Session>()
+    this.transientSessions = new Map<string, Session>()
     this.agentSessions = { active: [], hibernating: [], history: [] }
   }
 
@@ -24,7 +31,20 @@ export class SessionRegistry extends EventEmitter {
   }
 
   get(sessionId: string): Session | undefined {
-    return this.sessions.get(sessionId)
+    return this.sessions.get(sessionId) ?? this.transientSessions.get(sessionId)
+  }
+
+  /**
+   * Register on-demand "other" (undiscovered) sessions so terminal-attach can
+   * resolve them via get(). These are intentionally excluded from getAll() so
+   * they never enter the broadcast or the main session list. Entries already
+   * present in the main session map are skipped (the live entry wins).
+   */
+  upsertTransient(sessions: Session[]): void {
+    for (const session of sessions) {
+      if (this.sessions.has(session.id)) continue
+      this.transientSessions.set(session.id, session)
+    }
   }
 
   replaceSessions(nextSessions: Session[]): void {
@@ -61,6 +81,13 @@ export class SessionRegistry extends EventEmitter {
       })
 
     this.sessions = nextMap
+
+    // A previously-"other" session may have become discovered (e.g. renamed to
+    // match a prefix); drop any transient copy so it can't go stale and so the
+    // live entry is the single source of truth.
+    for (const id of nextMap.keys()) {
+      this.transientSessions.delete(id)
+    }
 
     if (hasChanges) {
       this.emit('sessions', this.getAll())

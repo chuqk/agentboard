@@ -38,6 +38,7 @@ import { useCounterBump } from '../hooks/useCounterBump'
 import { useExitCleanup } from '../hooks/useExitCleanup'
 import AgentIcon from './AgentIcon'
 import HistorySessionItem from './HistorySessionItem'
+import OtherSessionItem from './OtherSessionItem'
 import ProjectBadge from './ProjectBadge'
 import HostBadge from './HostBadge'
 import HostFilterDropdown from './HostFilterDropdown'
@@ -49,6 +50,12 @@ interface SessionListProps {
   sessions: Session[]
   hibernatingSessions?: AgentSession[]
   historySessions?: AgentSession[]
+  // "Other" (undiscovered) sessions surfaced on demand. The section only renders
+  // when showOtherSessions is true (DISCOVER_PREFIXES active); onLoadOtherSessions
+  // is fired when the section is expanded so the list is fetched lazily.
+  otherSessions?: Session[]
+  showOtherSessions?: boolean
+  onLoadOtherSessions?: () => void
   selectedSessionId: string | null
   selectedHibernatingSessionId?: string | null
   loading: boolean
@@ -84,6 +91,9 @@ export default function SessionList({
   sessions,
   hibernatingSessions = [],
   historySessions = [],
+  otherSessions = [],
+  showOtherSessions = false,
+  onLoadOtherSessions,
   selectedSessionId,
   selectedHibernatingSessionId = null,
   loading,
@@ -108,6 +118,8 @@ export default function SessionList({
   const setShowHistory = useSettingsStore((state) => state.setHistorySessionsExpanded)
   const showHibernating = useSettingsStore((state) => state.hibernatingSessionsExpanded)
   const setShowHibernating = useSettingsStore((state) => state.setHibernatingSessionsExpanded)
+  const showOther = useSettingsStore((state) => state.otherSessionsExpanded)
+  const setShowOther = useSettingsStore((state) => state.setOtherSessionsExpanded)
   const [previewSession, setPreviewSession] = useState<AgentSession | null>(null)
   const [historyLimit, setHistoryLimit] = useState(20)
   const prefersReducedMotion = useReducedMotion()
@@ -123,6 +135,15 @@ export default function SessionList({
       setHistoryLimit(20)
     }
   }, [showHistory])
+
+  // Lazily fetch "other" (undiscovered) sessions only while the section is
+  // expanded, so the hidden sessions are queried on demand rather than on every
+  // refresh — preserving the performance intent of DISCOVER_PREFIXES.
+  useEffect(() => {
+    if (showOtherSessions && showOther) {
+      onLoadOtherSessions?.()
+    }
+  }, [showOtherSessions, showOther, onLoadOtherSessions])
 
   // Animation sequencing constants (in ms)
   const EXIT_DURATION = 200
@@ -702,6 +723,47 @@ export default function SessionList({
                   >
                     Show more ({filteredHistorySessions.length - historyLimit} remaining)
                   </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {showOtherSessions && (
+          <div className="border-t border-border">
+            <button
+              type="button"
+              onClick={() => setShowOther(!showOther)}
+              className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted hover:text-primary"
+            >
+              <span className="flex items-center gap-2">
+                {showOther ? (
+                  <ChevronDownIcon className="h-4 w-4" />
+                ) : (
+                  <ChevronRightIcon className="h-4 w-4" />
+                )}
+                Other
+              </span>
+              <span className="w-8 text-right text-xs text-muted">
+                {otherSessions.length || ''}
+              </span>
+            </button>
+            {showOther && (
+              <div className="py-1">
+                {otherSessions.length === 0 ? (
+                  <div className="px-3 py-2 text-xs italic text-muted">
+                    No other tmux sessions
+                  </div>
+                ) : (
+                  otherSessions.map((session) => (
+                    <OtherSessionItem
+                      key={session.id}
+                      session={session}
+                      isSelected={session.id === selectedSessionId}
+                      showProjectName={showProjectName}
+                      onSelect={onSelect}
+                    />
+                  ))
                 )}
               </div>
             )}

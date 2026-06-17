@@ -534,6 +534,35 @@ export class SessionManager {
     )
   }
 
+  /**
+   * List windows from tmux sessions that are deliberately NOT discovered by the
+   * normal refresh because they don't match any DISCOVER_PREFIXES prefix. These
+   * are surfaced on demand via the "Other sessions" menu so they can be viewed
+   * without cluttering the main session list or the broadcast payload.
+   *
+   * Returns an empty array when no prefixes are configured — in that mode every
+   * non-managed session is already discovered as `external`, so nothing is
+   * "undiscovered".
+   */
+  listUndiscoveredWindows(): Session[] {
+    if (config.discoverPrefixes.length === 0) {
+      return []
+    }
+    const wsPrefix = `${this.sessionName}-ws-`
+    const sessions = this.listSessions().filter(
+      (sessionName) =>
+        !sessionName.startsWith(wsPrefix) &&
+        sessionName !== this.sessionName &&
+        !config.discoverPrefixes.some((prefix) =>
+          sessionName.startsWith(prefix)
+        )
+    )
+
+    return sessions.flatMap((sessionName) =>
+      this.listWindowsForSession(sessionName, 'undiscovered')
+    )
+  }
+
   private listSessions(): string[] {
     try {
       const output = this.runParsedTmux(['list-sessions', '-F', '#{session_name}'])
@@ -572,9 +601,11 @@ export class SessionManager {
           this.capturePaneContent,
           this.now
         )
-        // For external sessions, use session name as display name (more meaningful than window name).
-        // With AGENTBOARD_PREFER_WINDOW_NAME=true, use window name when distinct from session name.
-        const displayName = source === 'external'
+        // For externally-discovered sessions (including undiscovered ones shown
+        // on demand), use the session name as display name (more meaningful than
+        // the auto-renamed window name). With AGENTBOARD_PREFER_WINDOW_NAME=true,
+        // use the window name when distinct from the session name.
+        const displayName = source !== 'managed'
           ? resolveExternalDisplayName(sessionName, window.name, config.preferWindowName)
           : window.name
         const normalizedPath = normalizeProjectPath(window.path)

@@ -73,6 +73,7 @@ beforeEach(() => {
     showProjectName: true,
     showLastUserMessage: true,
     showSessionIdPrefix: false,
+    otherSessionsExpanded: false,
     projectFilters: [],
     hostFilters: [],
   })
@@ -362,6 +363,85 @@ describe('SessionList component', () => {
 
     expect(renameCalls).toEqual([])
     expect(() => renderer.root.findByType('input')).toThrow()
+
+    act(() => {
+      renderer.unmount()
+    })
+  })
+
+  test('renders Other section, lazily fetches on expand, and selects read-only items', () => {
+    useSettingsStore.setState({ otherSessionsExpanded: true })
+
+    const loadCalls: number[] = []
+    const selected: string[] = []
+    const other = makeSession({
+      id: 'other-1',
+      name: 'rogue',
+      source: 'undiscovered',
+      tmuxWindow: 'rogue:1',
+    })
+
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => {
+      renderer = TestRenderer.create(
+        <SessionList
+          sessions={[baseSession]}
+          otherSessions={[other]}
+          showOtherSessions
+          onLoadOtherSessions={() => loadCalls.push(1)}
+          selectedSessionId={null}
+          loading={false}
+          error={null}
+          onSelect={(sessionId) => selected.push(sessionId)}
+          onRename={() => {}}
+        />
+      )
+    })
+
+    const html = JSON.stringify(renderer.toJSON())
+    expect(html).toContain('Other')
+    expect(html).toContain('rogue')
+
+    // Lazily fetched: the load callback fires while the section is expanded.
+    expect(loadCalls.length).toBeGreaterThan(0)
+
+    const card = renderer.root.findByProps({
+      'data-testid': 'other-session-card',
+    })
+    // Read-only: no rename/kill context menu wired on the row.
+    expect(card.props.onContextMenu).toBeUndefined()
+
+    act(() => {
+      card.props.onClick()
+    })
+    expect(selected).toEqual(['other-1'])
+
+    act(() => {
+      renderer.unmount()
+    })
+  })
+
+  test('hides Other section when showOtherSessions is false', () => {
+    let renderer!: TestRenderer.ReactTestRenderer
+    act(() => {
+      renderer = TestRenderer.create(
+        <SessionList
+          sessions={[baseSession]}
+          otherSessions={[makeSession({ id: 'other-1', source: 'undiscovered' })]}
+          showOtherSessions={false}
+          onLoadOtherSessions={() => {}}
+          selectedSessionId={null}
+          loading={false}
+          error={null}
+          onSelect={() => {}}
+          onRename={() => {}}
+        />
+      )
+    })
+
+    expect(() =>
+      renderer.root.findByProps({ 'data-testid': 'other-session-card' })
+    ).toThrow()
 
     act(() => {
       renderer.unmount()

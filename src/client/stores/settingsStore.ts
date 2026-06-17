@@ -146,6 +146,8 @@ interface SettingsState {
   setHistorySessionsExpanded: (expanded: boolean) => void
   hibernatingSessionsExpanded: boolean
   setHibernatingSessionsExpanded: (expanded: boolean) => void
+  otherSessionsExpanded: boolean
+  setOtherSessionsExpanded: (expanded: boolean) => void
   sidebarWidth: number
   setSidebarWidth: (width: number) => void
   projectFilters: string[]
@@ -212,6 +214,8 @@ export const useSettingsStore = create<SettingsState>()(
       setHistorySessionsExpanded: (expanded) => set({ historySessionsExpanded: expanded }),
       hibernatingSessionsExpanded: true,
       setHibernatingSessionsExpanded: (expanded) => set({ hibernatingSessionsExpanded: expanded }),
+      otherSessionsExpanded: false,
+      setOtherSessionsExpanded: (expanded) => set({ otherSessionsExpanded: expanded }),
       sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
       setSidebarWidth: (width) =>
         set({

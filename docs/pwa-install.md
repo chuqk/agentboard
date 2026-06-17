@@ -70,7 +70,7 @@ If you don't have HTTPS, you can tell Chrome to treat your HTTP origin as secure
 ## What the PWA Does
 
 - **Standalone display:** Launches full-screen with no browser chrome
-- **App shell caching:** Caches static assets (JS, CSS, HTML, fonts, icons) for faster loads
+- **App shell caching:** Caches static assets (JS, CSS, fonts, icons) for faster loads; HTML is fetched network-first so auth layers (e.g. Cloudflare Access) stay fresh
 - **Auto-update:** Service worker silently updates when new versions are deployed
 
 ## What the PWA Does NOT Do
@@ -91,5 +91,6 @@ If you don't have HTTPS, you can tell Chrome to treat your HTTP origin as secure
 - Verify `display: standalone` is in the manifest
 
 **Service worker interferes with WebSocket:**
-- The service worker is configured to exclude `/api` and `/ws` routes
+- The service worker uses NetworkFirst for navigation and does not cache `/api` or `/ws` routes
 - If issues persist, unregister the service worker in DevTools → Application → Service Workers
+- Behind Cloudflare Access or similar auth proxies, clearing the PWA and re-installing it ensures a fresh service worker

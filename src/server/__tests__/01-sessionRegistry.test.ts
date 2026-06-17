@@ -354,4 +354,61 @@ describe('SessionRegistry', () => {
       expect(activeEvents).toHaveLength(1)
     }
   })
+
+  describe('transient ("other") sessions', () => {
+    test('upsertTransient makes get() resolve but keeps getAll() free of it', () => {
+      const registry = new SessionRegistry()
+      const other = makeSession({ id: 'other-1', source: 'undiscovered' })
+
+      registry.upsertTransient([other])
+
+      expect(registry.get('other-1')).toMatchObject({ id: 'other-1' })
+      // Must NOT appear in the broadcast/main list.
+      expect(registry.getAll()).toHaveLength(0)
+    })
+
+    test('upsertTransient does not emit a sessions event', () => {
+      const registry = new SessionRegistry()
+      const sessionsEvents: Session[][] = []
+      registry.on('sessions', (sessions) => sessionsEvents.push(sessions))
+
+      registry.upsertTransient([makeSession({ id: 'other-1', source: 'undiscovered' })])
+
+      expect(sessionsEvents).toHaveLength(0)
+    })
+
+    test('replaceSessions never wipes transient sessions for non-overlapping ids', () => {
+      const registry = new SessionRegistry()
+      registry.upsertTransient([makeSession({ id: 'other-1', source: 'undiscovered' })])
+
+      registry.replaceSessions([makeSession({ id: 'managed-1' })])
+
+      // Transient is still resolvable for attach, still absent from broadcast.
+      expect(registry.get('other-1')).toBeDefined()
+      expect(registry.getAll().map((s) => s.id)).toEqual(['managed-1'])
+    })
+
+    test('upsertTransient skips ids already present in the main map (live entry wins)', () => {
+      const registry = new SessionRegistry()
+      registry.replaceSessions([makeSession({ id: 'dup', name: 'live' })])
+
+      registry.upsertTransient([makeSession({ id: 'dup', name: 'stale' })])
+
+      expect(registry.get('dup')?.name).toBe('live')
+    })
+
+    test('replaceSessions prunes a transient entry once it becomes discovered', () => {
+      const registry = new SessionRegistry()
+      registry.upsertTransient([makeSession({ id: 'promoted', name: 'stale', source: 'undiscovered' })])
+      expect(registry.get('promoted')?.name).toBe('stale')
+
+      // The session is now discovered through the normal refresh.
+      registry.replaceSessions([makeSession({ id: 'promoted', name: 'fresh', source: 'external' })])
+
+      // The live entry is authoritative and the stale transient copy is gone.
+      expect(registry.get('promoted')?.name).toBe('fresh')
+      registry.replaceSessions([])
+      expect(registry.get('promoted')).toBeUndefined()
+    })
+  })
 })

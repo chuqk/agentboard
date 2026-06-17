@@ -1078,6 +1078,22 @@ app.post('/api/client-log', async (c) => {
 app.get('/api/health', (c) => c.json({ ok: true }))
 app.get('/api/sessions', (c) => c.json(registry.getAll()))
 
+// On-demand listing of "other" tmux sessions that DISCOVER_PREFIXES filters out
+// of the normal discovery. They are deliberately absent from the broadcast/main
+// list; this route lets the "Other sessions" menu fetch them when expanded.
+// Registering them as transient sessions lets terminal-attach resolve them
+// (read-only) without ever promoting them into getAll().
+app.get('/api/sessions/other', (c) => {
+  try {
+    const sessions = stampLocalSessions(sessionManager.listUndiscoveredWindows())
+    registry.upsertTransient(sessions)
+    return c.json(sessions)
+  } catch (error) {
+    logger.warn('list_other_sessions_failed', { error: String(error) })
+    return c.json([], 200)
+  }
+})
+
 app.get('/api/session-preview/:sessionId', async (c) => {
   const sessionId = c.req.param('sessionId')
   if (!isValidSessionId(sessionId)) {
@@ -1469,6 +1485,7 @@ const websocketHandlers = {
       remoteAllowAttach: config.remoteAllowAttach,
       hostLabel: config.hostLabel,
       preferWindowName: config.preferWindowName,
+      discoverPrefixesActive: config.discoverPrefixes.length > 0,
       clientLogLevel: logLevel,
     })
     const agentSessions = registry.getAgentSessions()
