@@ -173,6 +173,34 @@ describe('logger', () => {
     fs.rmSync(tmpDir, { recursive: true })
   })
 
+  test('logs written before an event-loop freeze survive a SIGKILL', async () => {
+    // Regression test for the 2026-07-07 startup hang: with a worker-thread
+    // transport (pino.transport), logs queued before the event loop froze were
+    // never flushed — the process died with a 0-byte log and no evidence.
+    // Writes must be synchronous on the main thread.
+    const script = [
+      "import { logger } from './src/server/logger'",
+      "logger.info('before_freeze_marker')",
+      "Bun.spawnSync(['sleep', '30'])",
+    ].join('\n')
+
+    const proc = Bun.spawn(['bun', '-e', script], {
+      cwd: process.cwd(),
+      env: { ...process.env, NODE_ENV: 'production', LOG_FILE: '' },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+
+    // Give the child time to init the logger, write the line, and enter the
+    // freeze — then kill it hard, exactly like the real hang ended
+    await new Promise((resolve) => setTimeout(resolve, 2500))
+    proc.kill(9)
+    await proc.exited
+
+    const stdout = await new Response(proc.stdout).text()
+    expect(stdout).toContain('before_freeze_marker')
+  }, 10000)
+
   test('event field is not overwritten by data', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'logger-test-'))
     const logFile = path.join(tmpDir, 'test.log')

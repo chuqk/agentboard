@@ -49,73 +49,52 @@ function hasPinoPretty(): boolean {
   }
 }
 
+// Pretty stdout as a synchronous main-thread stream — deliberately NOT
+// pino.transport(): the worker-thread transport buffers logs until the event
+// loop services the worker handshake, so a freeze before that point (e.g. the
+// 2026-07-07 startup hang on an unresponsive tailscaled) leaves a 0-byte log
+// with no evidence. Sync streams also work in compiled Bun binaries, which
+// lack the worker_threads support pino.transport() requires.
+function createPrettyStdoutStream(): pino.DestinationStream | null {
+  if (!hasPinoPretty()) return null
+  try {
+    const prettyFactory = require('pino-pretty') as (
+      opts: Record<string, unknown>
+    ) => pino.DestinationStream
+    return prettyFactory({ ...PRETTY_OPTIONS, destination: 1, sync: true })
+  } catch {
+    return null
+  }
+}
+
 function createLogger(): pino.Logger {
   const logLevel = getLogLevel()
   const logFile = getLogFile()
   const isDev = process.env.NODE_ENV !== 'production'
-  const canPretty = hasPinoPretty()
 
-  // Dev mode: use pino-pretty for console, optionally also log to file
-  // Requires pino transports (worker_threads) — unavailable in compiled Bun binaries
-  if (isDev && canPretty) {
-    try {
-      const targets: pino.TransportTargetOptions[] = [
-        { target: 'pino-pretty', options: PRETTY_OPTIONS, level: logLevel },
-      ]
-
-      // Also log to file in dev if LOG_FILE is explicitly set via env var
-      // (don't use config default in dev to avoid noisy file logging)
-      if (process.env.LOG_FILE) {
-        targets.push({
-          target: 'pino/file',
-          options: { destination: logFile, mkdir: true },
-          level: logLevel,
-        })
-      }
-
-      return pino({ level: logLevel, transport: { targets } })
-    } catch {
-      // Fall through to production logger (compiled binary or missing pino-pretty)
-    }
-  }
-
-  // Production (or dev fallback): human-readable stdout, structured JSON file
-  // Uses pino-pretty for stdout when available (npx installs), otherwise raw JSON
-  // with ISO timestamps as fallback (compiled binaries)
   const baseOptions: pino.LoggerOptions = {
     level: logLevel,
     base: {},                              // strip pid, hostname
     timestamp: pino.stdTimeFunctions.isoTime, // ISO 8601 instead of epoch ms
   }
 
-  if (logFile) {
+  // Pretty stdout when pino-pretty is available (npx installs), otherwise raw
+  // JSON (compiled binaries). Either way the write is synchronous.
+  const stdoutStream =
+    createPrettyStdoutStream() ?? pino.destination({ dest: 1, sync: true })
+
+  // Also log to structured JSON file. In dev, only when LOG_FILE is explicitly
+  // set via env var (don't use config default in dev to avoid noisy file logging)
+  if (logFile && (!isDev || process.env.LOG_FILE)) {
     fileDestination = pino.destination({ dest: logFile, sync: true, mkdir: true })
-
-    if (canPretty) {
-      try {
-        const prettyStdout = pino.transport({ target: 'pino-pretty', options: PRETTY_OPTIONS })
-        const streams: pino.StreamEntry[] = [
-          { level: logLevel, stream: prettyStdout },
-          { level: logLevel, stream: fileDestination },
-        ]
-        return pino(baseOptions, pino.multistream(streams))
-      } catch { /* fall through */ }
-    }
-
     const streams: pino.StreamEntry[] = [
-      { level: logLevel, stream: pino.destination({ dest: 1, sync: true }) },
+      { level: logLevel, stream: stdoutStream },
       { level: logLevel, stream: fileDestination },
     ]
     return pino(baseOptions, pino.multistream(streams))
   }
 
-  // Without log file: pretty stdout or plain JSON
-  if (canPretty) {
-    try {
-      return pino(baseOptions, pino.transport({ target: 'pino-pretty', options: PRETTY_OPTIONS }))
-    } catch { /* fall through */ }
-  }
-  return pino(baseOptions)
+  return pino(baseOptions, stdoutStream)
 }
 
 const pinoLogger: pino.Logger = createLogger()
