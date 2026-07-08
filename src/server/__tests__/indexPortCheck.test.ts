@@ -31,6 +31,10 @@ const originalSetInterval = globalThis.setInterval
 const originalDbPath = process.env.AGENTBOARD_DB_PATH
 let tempDbPath: string | null = null
 let importCounter = 0
+let spawnSyncCalls: Array<{
+  command: string
+  options: Parameters<typeof Bun.spawnSync>[1]
+}> = []
 
 beforeAll(() => {
   const suffix = `port-check-${process.pid}-${Date.now()}-${Math.random()
@@ -41,9 +45,11 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
+  spawnSyncCalls = []
   // Set up mocks that simulate port already in use
   bunAny.spawnSync = ((...args: Parameters<typeof Bun.spawnSync>) => {
     const command = Array.isArray(args[0]) ? args[0][0] : ''
+    spawnSyncCalls.push({ command, options: args[1] })
     if (command === 'lsof') {
       return {
         exitCode: 0,
@@ -109,5 +115,26 @@ describe('port availability', () => {
     // Core behavior: server should exit with code 1 when port is in use
     // Note: Log output is tested separately in logger.test.ts
     expect(thrown?.message).toBe('exit:1')
+  })
+
+  test('port check spawns lsof and ps with a timeout so startup cannot freeze', async () => {
+    importCounter += 1
+    const suffix = `port-check-${importCounter}`
+
+    try {
+      await import(`../index?test=${suffix}`)
+    } catch {
+      // exits via mocked process.exit; only the recorded spawn options matter
+    }
+
+    // Without a timeout, an unresponsive lsof/ps blocks the synchronous
+    // startup path forever (same failure class as the 2026-07-07 hang)
+    const lsofCall = spawnSyncCalls.find((call) => call.command === 'lsof')
+    expect(lsofCall).toBeDefined()
+    expect(lsofCall?.options?.timeout).toBe(5000)
+
+    const psCall = spawnSyncCalls.find((call) => call.command === 'ps')
+    expect(psCall).toBeDefined()
+    expect(psCall?.options?.timeout).toBe(5000)
   })
 })

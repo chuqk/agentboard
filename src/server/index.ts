@@ -77,9 +77,12 @@ function checkPortAvailable(port: number): void {
   try {
     // Use -sTCP:LISTEN to only match processes actually listening on the port,
     // not stale/closed connections from other processes (e.g. Playwright/Chrome)
+    // timeout: an unresponsive lsof must not freeze startup; on timeout stdout is
+    // empty, so we fall through to the existing "cannot verify -> continue" path
     result = Bun.spawnSync(['lsof', '-i', `:${port}`, '-sTCP:LISTEN', '-t'], {
       stdout: 'pipe',
       stderr: 'pipe',
+      timeout: 5000,
     })
   } catch {
     return
@@ -94,6 +97,7 @@ function checkPortAvailable(port: number): void {
       const nameResult = Bun.spawnSync(['ps', '-p', pid, '-o', 'comm='], {
         stdout: 'pipe',
         stderr: 'pipe',
+        timeout: 5000,
       })
       processName = nameResult.stdout?.toString().trim() || 'unknown'
     } catch {
@@ -112,9 +116,15 @@ function getTailscaleIp(): string | null {
 
   for (const tsPath of tailscalePaths) {
     try {
+      // timeout: this runs synchronously during startup (after the first bind,
+      // before accept). An unresponsive tailscaled once froze the event loop
+      // here for ~19h (2026-07-07 502 outage). On timeout exitCode is non-zero,
+      // so we fall through to the existing null contract: skip the Tailscale
+      // bind and keep the 127.0.0.1 (Cloudflare) path alive.
       const result = Bun.spawnSync([tsPath, 'ip', '-4'], {
         stdout: 'pipe',
         stderr: 'pipe',
+        timeout: 3000,
       })
       if (result.exitCode === 0) {
         const ip = result.stdout.toString().trim()
@@ -1413,9 +1423,10 @@ app.get('/api/clipboard-file-path', async (c) => {
     return c.json({ path: null })
   }
   try {
+    // timeout: a hung osascript would otherwise leave this handler pending forever
     const proc = Bun.spawn(
       ['osascript', '-e', 'POSIX path of (the clipboard as «class furl»)'],
-      { stdout: 'pipe', stderr: 'pipe' }
+      { stdout: 'pipe', stderr: 'pipe', timeout: 5000 }
     )
     const text = await new Response(proc.stdout).text()
     const exitCode = await proc.exited
