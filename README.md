@@ -222,7 +222,7 @@ LOG_LEVEL=info                          # debug | info | warn | error (default: 
 LOG_FILE=~/.agentboard/agentboard.log   # default; set empty to disable file logging
 ```
 
-Console output is pretty-printed in development, JSON in production (`NODE_ENV=production`). File output is always JSON. Set `LOG_FILE=` (empty) to disable file logging.
+Console output is pretty-printed when `pino-pretty` is available (dev and npx installs) and raw JSON otherwise (compiled binaries). File output is always JSON. All log writes are synchronous on the main thread so evidence survives even a hard freeze or crash. Set `LOG_FILE=` (empty) to disable file logging.
 
 ## Troubleshooting
 
