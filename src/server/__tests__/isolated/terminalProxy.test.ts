@@ -525,4 +525,33 @@ describe('TerminalProxy', () => {
       options: expect.objectContaining({ timeout: 15000 }),
     })
   })
+
+  // ignoreSize: peek-style clients (soma native terminal) attach with
+  // `-f ignore-size` so they never shrink a window a real client is viewing.
+  // The default (no ignoreSize) attach args are covered by the first test.
+  test('attaches with -f ignore-size when ignoreSize option is set', async () => {
+    const harness = createSpawnHarness()
+    const proxy = new TerminalProxy({
+      connectionId: 'igs',
+      sessionName: 'agentboard-ws-igs',
+      baseSession: 'agentboard',
+      onData: () => {},
+      spawn: harness.spawn,
+      spawnSync: harness.spawnSync,
+      wait: async () => {},
+      ignoreSize: true,
+    })
+
+    await proxy.start()
+
+    expect(harness.spawnCalls[0]?.args).toEqual([
+      'tmux',
+      'attach',
+      '-f',
+      'ignore-size',
+      '-t',
+      'agentboard-ws-igs',
+    ])
+    expect(proxy.isReady()).toBe(true)
+  })
 })

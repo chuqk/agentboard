@@ -156,7 +156,10 @@ class PtyTerminalProxy extends TerminalProxyBase {
 
     let proc: ReturnType<typeof Bun.spawn>
     try {
-      proc = this.spawn(['tmux', 'attach', '-t', this.options.sessionName], {
+      const attachArgs = this.options.ignoreSize
+        ? ['tmux', 'attach', '-f', 'ignore-size', '-t', this.options.sessionName]
+        : ['tmux', 'attach', '-t', this.options.sessionName]
+      proc = this.spawn(attachArgs, {
         env: {
           ...process.env,
           TERM: 'xterm-256color',

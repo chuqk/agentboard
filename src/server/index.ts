@@ -296,6 +296,9 @@ interface WSData {
   terminalAttachSeq: number
   lastAttachKey: string | null
   lastAttachTs: number
+  // From the /ws upgrade query (?sizeMode=ignore): attach tmux clients with
+  // `-f ignore-size` so this connection never resizes shared windows.
+  ignoreSize: boolean
 }
 
 const sockets = new Set<ServerWebSocket<WSData>>()
@@ -1471,6 +1474,7 @@ function serverFetch(req: Request, server: Server<WSData>) {
           terminalAttachSeq: 0,
           lastAttachKey: null,
           lastAttachTs: 0,
+          ignoreSize: url.searchParams.get('sizeMode') === 'ignore',
         },
       })
     ) {
@@ -3061,6 +3065,7 @@ function createPersistentTerminal(ws: ServerWebSocket<WSData>) {
     sessionName,
     baseSession: config.tmuxSession,
     monitorTargets: config.terminalMonitorTargets,
+    ignoreSize: ws.data.ignoreSize,
     onData: (data) => {
       // Guard: ignore output from proxies that have been replaced.
       if (ws.data.terminal !== terminal) return

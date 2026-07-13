@@ -48,6 +48,11 @@ interface TerminalProxyOptions {
   sshOptions?: string[]
   commandTimeoutMs?: number
   mutationTimeoutMs?: number
+  // Attach the tmux client with `-f ignore-size` (tmux >= 3.2) so this client
+  // never participates in window-size recalculation. Used by peek-style clients
+  // (e.g. soma's native terminal) that must not shrink windows other (real)
+  // clients are attached to. PTY mode only; pipe-pane/ssh proxies ignore it.
+  ignoreSize?: boolean
 }
 
 interface ITerminalProxy {
