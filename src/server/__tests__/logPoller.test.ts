@@ -1240,6 +1240,268 @@ describe('LogPoller', () => {
     db.close()
   })
 
+  test('steals a stale window claim when a newer log content-matches the window (same-window restart)', async () => {
+    const db = initDatabase({ path: ':memory:' })
+    const registry = new SessionRegistry()
+    registry.replaceSessions([baseSession])
+
+    // The window now shows the NEW session's conversation
+    const newTokens = Array.from({ length: 60 }, (_, i) => `fresh${i}`).join(' ')
+    setTmuxOutput(baseSession.tmuxWindow, buildLastExchangeOutput(newTokens))
+
+    const projectPath = baseSession.projectPath
+    const encoded = encodeProjectPath(projectPath)
+    const logDir = path.join(
+      process.env.CLAUDE_CONFIG_DIR ?? '',
+      'projects',
+      encoded
+    )
+    await fs.mkdir(logDir, { recursive: true })
+
+    // Old session: owns the window, but its log went silent hours ago
+    const oldTokens = Array.from({ length: 60 }, (_, i) => `stale${i}`).join(' ')
+    const oldLogPath = path.join(logDir, 'session-steal-old.jsonl')
+    await fs.writeFile(
+      oldLogPath,
+      `${buildUserLogEntry(oldTokens, { sessionId: 'claude-steal-old', cwd: projectPath })}\n`
+    )
+    const oldStats = await fs.stat(oldLogPath)
+    const staleActivity = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+    db.insertSession({
+      sessionId: 'claude-steal-old',
+      logFilePath: oldLogPath,
+      projectPath,
+      slug: null,
+      agentType: 'claude',
+      displayName: baseSession.name,
+      createdAt: staleActivity,
+      lastActivityAt: staleActivity,
+      lastUserMessage: '/wrap',
+      currentWindow: baseSession.tmuxWindow,
+      isPinned: false,
+      lastResumeError: null,
+      lastKnownLogSize: oldStats.size,
+      isCodexExec: false,
+      launchCommand: null,
+    })
+
+    // New session: windowless, its growing log matches the window content
+    const newLogPath = path.join(logDir, 'session-steal-new.jsonl')
+    const newLine = buildUserLogEntry(newTokens, {
+      sessionId: 'claude-steal-new',
+      cwd: projectPath,
+    })
+    const newAssistant = JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: newTokens }] },
+    })
+    await fs.writeFile(newLogPath, `${newLine}\n${newAssistant}\n`)
+    const newStats = await fs.stat(newLogPath)
+    db.insertSession({
+      sessionId: 'claude-steal-new',
+      logFilePath: newLogPath,
+      projectPath,
+      slug: null,
+      agentType: 'claude',
+      displayName: 'restarted',
+      createdAt: newStats.birthtime.toISOString(),
+      lastActivityAt: newStats.mtime.toISOString(),
+      lastUserMessage: null,
+      currentWindow: null,
+      isPinned: false,
+      lastResumeError: null,
+      lastKnownLogSize: 0,
+      isCodexExec: false,
+      launchCommand: null,
+    })
+
+    const orphaned: Array<{ sessionId: string; supersededBy?: string }> = []
+    const poller = new LogPoller(db, registry, {
+      matchWorkerClient: new InlineMatchWorkerClient(),
+      onSessionOrphaned: (sessionId, supersededBy) => {
+        orphaned.push({ sessionId, supersededBy })
+      },
+    })
+    await poller.pollOnce()
+
+    const claimant = db.getSessionById('claude-steal-new')
+    expect(claimant?.currentWindow).toBe(baseSession.tmuxWindow)
+    expect(claimant?.displayName).toBe(baseSession.name)
+    const evicted = db.getSessionById('claude-steal-old')
+    expect(evicted?.currentWindow).toBeNull()
+    expect(orphaned).toContainEqual({
+      sessionId: 'claude-steal-old',
+      supersededBy: 'claude-steal-new',
+    })
+
+    db.close()
+  })
+
+  test('does not steal a window whose claim is still fresh', async () => {
+    const db = initDatabase({ path: ':memory:' })
+    const registry = new SessionRegistry()
+    registry.replaceSessions([baseSession])
+
+    const newTokens = Array.from({ length: 60 }, (_, i) => `crisp${i}`).join(' ')
+    setTmuxOutput(baseSession.tmuxWindow, buildLastExchangeOutput(newTokens))
+
+    const projectPath = baseSession.projectPath
+    const encoded = encodeProjectPath(projectPath)
+    const logDir = path.join(
+      process.env.CLAUDE_CONFIG_DIR ?? '',
+      'projects',
+      encoded
+    )
+    await fs.mkdir(logDir, { recursive: true })
+
+    // Occupant's log is active right now — its claim must be untouchable
+    const oldTokens = Array.from({ length: 60 }, (_, i) => `live${i}`).join(' ')
+    const oldLogPath = path.join(logDir, 'session-fresh-old.jsonl')
+    await fs.writeFile(
+      oldLogPath,
+      `${buildUserLogEntry(oldTokens, { sessionId: 'claude-fresh-old', cwd: projectPath })}\n`
+    )
+    const oldStats = await fs.stat(oldLogPath)
+    db.insertSession({
+      sessionId: 'claude-fresh-old',
+      logFilePath: oldLogPath,
+      projectPath,
+      slug: null,
+      agentType: 'claude',
+      displayName: baseSession.name,
+      createdAt: oldStats.birthtime.toISOString(),
+      lastActivityAt: new Date().toISOString(),
+      lastUserMessage: null,
+      currentWindow: baseSession.tmuxWindow,
+      isPinned: false,
+      lastResumeError: null,
+      lastKnownLogSize: oldStats.size,
+      isCodexExec: false,
+      launchCommand: null,
+    })
+
+    const newLogPath = path.join(logDir, 'session-fresh-new.jsonl')
+    const newLine = buildUserLogEntry(newTokens, {
+      sessionId: 'claude-fresh-new',
+      cwd: projectPath,
+    })
+    await fs.writeFile(newLogPath, `${newLine}\n`)
+    const newStats = await fs.stat(newLogPath)
+    db.insertSession({
+      sessionId: 'claude-fresh-new',
+      logFilePath: newLogPath,
+      projectPath,
+      slug: null,
+      agentType: 'claude',
+      displayName: 'challenger',
+      createdAt: newStats.birthtime.toISOString(),
+      lastActivityAt: newStats.mtime.toISOString(),
+      lastUserMessage: null,
+      currentWindow: null,
+      isPinned: false,
+      lastResumeError: null,
+      lastKnownLogSize: 0,
+      isCodexExec: false,
+      launchCommand: null,
+    })
+
+    const poller = new LogPoller(db, registry, {
+      matchWorkerClient: new InlineMatchWorkerClient(),
+    })
+    await poller.pollOnce()
+
+    const occupant = db.getSessionById('claude-fresh-old')
+    expect(occupant?.currentWindow).toBe(baseSession.tmuxWindow)
+    const challenger = db.getSessionById('claude-fresh-new')
+    expect(challenger?.currentWindow).toBeNull()
+
+    db.close()
+  })
+
+  test('does not steal a stale claim when the claimant log is even older', async () => {
+    const db = initDatabase({ path: ':memory:' })
+    const registry = new SessionRegistry()
+    registry.replaceSessions([baseSession])
+
+    const newTokens = Array.from({ length: 60 }, (_, i) => `elder${i}`).join(' ')
+    setTmuxOutput(baseSession.tmuxWindow, buildLastExchangeOutput(newTokens))
+
+    const projectPath = baseSession.projectPath
+    const encoded = encodeProjectPath(projectPath)
+    const logDir = path.join(
+      process.env.CLAUDE_CONFIG_DIR ?? '',
+      'projects',
+      encoded
+    )
+    await fs.mkdir(logDir, { recursive: true })
+
+    const oldTokens = Array.from({ length: 60 }, (_, i) => `holder${i}`).join(' ')
+    const occupantLogPath = path.join(logDir, 'session-elder-occupant.jsonl')
+    await fs.writeFile(
+      occupantLogPath,
+      `${buildUserLogEntry(oldTokens, { sessionId: 'claude-elder-occupant', cwd: projectPath })}\n`
+    )
+    const occupantStats = await fs.stat(occupantLogPath)
+    const occupantActivity = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+    db.insertSession({
+      sessionId: 'claude-elder-occupant',
+      logFilePath: occupantLogPath,
+      projectPath,
+      slug: null,
+      agentType: 'claude',
+      displayName: baseSession.name,
+      createdAt: occupantActivity,
+      lastActivityAt: occupantActivity,
+      lastUserMessage: null,
+      currentWindow: baseSession.tmuxWindow,
+      isPinned: false,
+      lastResumeError: null,
+      lastKnownLogSize: occupantStats.size,
+      isCodexExec: false,
+      launchCommand: null,
+    })
+
+    // Claimant's log content matches the window but its activity is OLDER
+    // than the occupant's — no evidence it superseded the occupant; skip.
+    const claimantActivity = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
+    const claimantLogPath = path.join(logDir, 'session-elder-claimant.jsonl')
+    const claimantLine = buildUserLogEntry(newTokens, {
+      sessionId: 'claude-elder-claimant',
+      cwd: projectPath,
+      timestamp: claimantActivity,
+    })
+    await fs.writeFile(claimantLogPath, `${claimantLine}\n`)
+    db.insertSession({
+      sessionId: 'claude-elder-claimant',
+      logFilePath: claimantLogPath,
+      projectPath,
+      slug: null,
+      agentType: 'claude',
+      displayName: 'elder',
+      createdAt: claimantActivity,
+      lastActivityAt: claimantActivity,
+      lastUserMessage: null,
+      currentWindow: null,
+      isPinned: false,
+      lastResumeError: null,
+      lastKnownLogSize: 0,
+      isCodexExec: false,
+      launchCommand: null,
+    })
+
+    const poller = new LogPoller(db, registry, {
+      matchWorkerClient: new InlineMatchWorkerClient(),
+    })
+    await poller.pollOnce()
+
+    const occupant = db.getSessionById('claude-elder-occupant')
+    expect(occupant?.currentWindow).toBe(baseSession.tmuxWindow)
+    const claimant = db.getSessionById('claude-elder-claimant')
+    expect(claimant?.currentWindow).toBeNull()
+
+    db.close()
+  })
+
   test('matches new session to window when existing session is orphaned between polls', async () => {
     const db = initDatabase({ path: ':memory:' })
     const registry = new SessionRegistry()

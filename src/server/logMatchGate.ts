@@ -108,3 +108,29 @@ export function shouldRunMatching(
 ): boolean {
   return getEntriesNeedingMatch(entries, sessions, options).length > 0
 }
+
+/**
+ * A window claim goes stale once the owning session's log has been silent for
+ * this long. A stale claim may be stolen by a windowless session whose log is
+ * newer AND whose content matches the window — the same-window restart case
+ * (e.g. a fresh claude after /wrap). Without stealing, that case deadlocks:
+ * the old session survives startup verification via the display-name fallback
+ * while the new session can never match a claimed window, so the association
+ * (and everything derived from it: lastUserMessage, transcript resolution,
+ * wake target) stays frozen on the dead log indefinitely.
+ *
+ * An idle-but-live window still shows its own conversation, so the content
+ * match won't hand it to another log; this threshold only keeps very fresh
+ * claims out of the steal path entirely.
+ */
+export const STALE_WINDOW_CLAIM_MS = 10 * 60 * 1000
+
+export function isWindowClaimStale(
+  lastActivityAt: string,
+  now: number = Date.now()
+): boolean {
+  const at = Date.parse(lastActivityAt)
+  // Unparseable activity = no evidence the claim is live; let the content
+  // match decide rather than freezing the window forever.
+  return !Number.isFinite(at) || now - at > STALE_WINDOW_CLAIM_MS
+}

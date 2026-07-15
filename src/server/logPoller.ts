@@ -1,6 +1,6 @@
 import { logger } from './logger'
 import { config } from './config'
-import type { SessionDatabase } from './db'
+import type { AgentSessionRecord, SessionDatabase } from './db'
 import { getLogSearchDirs, normalizeProjectPath } from './logDiscovery'
 import { DEFAULT_SCROLLBACK_LINES, extractLastEntryTimestamp, isSameOrChildPath, isToolNotificationText } from './logMatcher'
 import { deriveDisplayName } from './agentSessions'
@@ -12,6 +12,7 @@ import type { Session } from '../shared/types'
 import type { KnownSession, LogEntrySnapshot } from './logPollData'
 import {
   getEntriesNeedingMatch,
+  isWindowClaimStale,
   type SessionSnapshot,
 } from './logMatchGate'
 import type {
@@ -268,6 +269,86 @@ export class LogPoller {
     }
   }
 
+  /**
+   * Claim `window` for `claimant`, evicting a stale occupant if necessary.
+   *
+   * db.claimCurrentWindow refuses to touch a window another row still owns,
+   * so a same-window agent restart (fresh log, old session dead at its final
+   * prompt) would otherwise deadlock: the old claim survives startup
+   * verification via the display-name fallback, while the new log can never
+   * be matched to a claimed window. When the occupant's log has been silent
+   * past the stale threshold AND the claimant's log is strictly newer,
+   * orphan the occupant first (the row is kept — D-2026-002) and hand the
+   * window over.
+   *
+   * Every caller must hold content-match evidence that the window currently
+   * shows the claimant's conversation; that evidence is what makes eviction
+   * safe. `windowsClaimedThisPass` prevents two stale logs from evicting
+   * each other within a single pass (a claim made seconds ago can still
+   * carry an old lastActivityAt, so recency alone can't guard this).
+   */
+  private claimWindowEvictingStaleOccupant(
+    claimant: AgentSessionRecord,
+    window: Session,
+    windowsClaimedThisPass: Set<string>
+  ): AgentSessionRecord | null {
+    if (windowsClaimedThisPass.has(window.tmuxWindow)) {
+      logger.info('window_claim_skipped_claimed_this_pass', {
+        window: window.tmuxWindow,
+        sessionId: claimant.sessionId,
+      })
+      return null
+    }
+    const occupant = this.db.getSessionByWindow(window.tmuxWindow)
+    if (occupant && occupant.sessionId !== claimant.sessionId) {
+      const occupantAt = Date.parse(occupant.lastActivityAt)
+      const claimantAt = Date.parse(claimant.lastActivityAt)
+      const occupantStale = isWindowClaimStale(occupant.lastActivityAt)
+      const claimantNewer =
+        Number.isFinite(claimantAt) &&
+        (!Number.isFinite(occupantAt) || claimantAt > occupantAt)
+      if (!occupantStale || !claimantNewer) {
+        logger.info('window_claim_skipped_occupied', {
+          window: window.tmuxWindow,
+          sessionId: claimant.sessionId,
+          occupantSessionId: occupant.sessionId,
+          occupantStale,
+          claimantNewer,
+        })
+        return null
+      }
+      const orphaned = this.db.orphanSession(occupant.sessionId, {
+        hibernate: occupant.isPinned,
+      })
+      logger.info('stale_window_claim_stolen', {
+        window: window.tmuxWindow,
+        fromSessionId: occupant.sessionId,
+        toSessionId: claimant.sessionId,
+        occupantLastActivityAt: occupant.lastActivityAt,
+        claimantLastActivityAt: claimant.lastActivityAt,
+      })
+      if (orphaned) {
+        this.onSessionOrphaned?.(occupant.sessionId, claimant.sessionId)
+      }
+    }
+    const claimed = this.db.claimCurrentWindow(
+      claimant.sessionId,
+      window.tmuxWindow,
+      {
+        displayName: window.name,
+        lastResumeError: null,
+        wakeStartedAt: null,
+        ...(window.command && !claimant.launchCommand
+          ? { launchCommand: window.command }
+          : {}),
+      }
+    )
+    if (claimed) {
+      windowsClaimedThisPass.add(window.tmuxWindow)
+    }
+    return claimed
+  }
+
   private async runOrphanRematchInBackground(): Promise<void> {
     if (this.orphanRematchInProgress || !this.orphanRematchPending) {
       return
@@ -384,6 +465,7 @@ export class LogPoller {
           .filter(Boolean) as string[]
       )
       const matchedOrphanSessionIds = new Set<string>()
+      const windowsClaimedThisPass = new Set<string>()
       let orphanMatches = 0
 
       for (const match of response.orphanMatches ?? []) {
@@ -392,24 +474,12 @@ export class LogPoller {
 
         const existing = this.db.getSessionByLogPath(match.logPath)
         if (existing && !existing.currentWindow) {
-          // Check if window is already claimed by another session
-          if (claimedWindows.has(match.tmuxWindow)) {
-            logger.info('orphan_rematch_skipped_window_claimed', {
-              sessionId: existing.sessionId,
-              window: match.tmuxWindow,
-              claimedBySessionId: this.db.getSessionByWindow(match.tmuxWindow)?.sessionId,
-            })
-            continue
-          }
-          const claimed = this.db.claimCurrentWindow(
-            existing.sessionId,
-            match.tmuxWindow,
-            {
-              displayName: window.name,
-              lastResumeError: null,
-              wakeStartedAt: null,
-              ...(window.command && !existing.launchCommand ? { launchCommand: window.command } : {}),
-            }
+          // Content match in hand — claim the window, evicting a stale
+          // occupant if one is squatting on it (same-window restart case).
+          const claimed = this.claimWindowEvictingStaleOccupant(
+            existing,
+            window,
+            windowsClaimedThisPass
           )
           if (!claimed) continue
           claimedWindows.add(match.tmuxWindow)
@@ -605,6 +675,9 @@ export class LogPoller {
       if (!window) continue
       exactWindowMatches.set(match.logPath, window)
     }
+    // Guards claimWindowEvictingStaleOccupant against two stale logs evicting
+    // each other within this single response pass.
+    const windowsClaimedThisPass = new Set<string>()
 
     // Build list of unclaimed, managed no-message windows for deferral checks.
     // Only unclaimed managed windows can trigger deferral — external windows and
@@ -663,15 +736,10 @@ export class LogPoller {
               this.rematchAttemptCache.set(existing.sessionId, Date.now())
               const exactMatch = exactWindowMatches.get(entry.logPath) ?? null
               if (exactMatch) {
-                const claimed = this.db.claimCurrentWindow(
-                  existing.sessionId,
-                  exactMatch.tmuxWindow,
-                  {
-                    displayName: exactMatch.name,
-                    lastResumeError: null,
-                    wakeStartedAt: null,
-                    ...(exactMatch.command && !existing.launchCommand ? { launchCommand: exactMatch.command } : {}),
-                  }
+                const claimed = this.claimWindowEvictingStaleOccupant(
+                  existing,
+                  exactMatch,
+                  windowsClaimedThisPass
                 )
                 if (claimed) {
                   logger.info('session_rematched', {
@@ -745,15 +813,10 @@ export class LogPoller {
               this.rematchAttemptCache.set(sessionId, Date.now())
               const exactMatch = exactWindowMatches.get(entry.logPath) ?? null
               if (exactMatch) {
-                const claimed = this.db.claimCurrentWindow(
-                  sessionId,
-                  exactMatch.tmuxWindow,
-                  {
-                    displayName: exactMatch.name,
-                    lastResumeError: null,
-                    wakeStartedAt: null,
-                    ...(exactMatch.command && !existingById.launchCommand ? { launchCommand: exactMatch.command } : {}),
-                  }
+                const claimed = this.claimWindowEvictingStaleOccupant(
+                  existingById,
+                  exactMatch,
+                  windowsClaimedThisPass
                 )
                 if (claimed) {
                   logger.info('session_rematched', {

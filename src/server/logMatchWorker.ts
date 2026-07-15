@@ -17,7 +17,11 @@ import {
   isToolNotificationText,
   matchWindowsToLogsByExactRg,
 } from './logMatcher'
-import { getEntriesNeedingMatch, shouldSkipMatching } from './logMatchGate'
+import {
+  getEntriesNeedingMatch,
+  isWindowClaimStale,
+  shouldSkipMatching,
+} from './logMatchGate'
 import {
   collectLogEntriesForPaths,
   collectLogEntryBatch,
@@ -93,17 +97,21 @@ export function handleMatchWorkerRequest(
       payload.windows.map((w) => [w.tmuxWindow, w] as const)
     )
 
-    // Only match against unclaimed windows — claimed windows would be
-    // rejected by the main thread anyway (logPoller refuses to steal),
-    // so capturing their scrollback and running rg is wasted work.
-    const claimedWindows = new Set(
+    // Only match against unclaimed windows, plus claimed windows whose owning
+    // session's log has gone stale. Live claims would be rejected by the main
+    // thread anyway (logPoller only steals stale claims), so capturing their
+    // scrollback and running rg is wasted work — but stale claims must be
+    // included here or the steal path never sees a match.
+    const claimOwnerByWindow = new Map(
       payload.sessions
-        .map((s) => s.currentWindow)
-        .filter(Boolean) as string[]
+        .filter((s) => s.currentWindow)
+        .map((s) => [s.currentWindow as string, s] as const)
     )
-    const unclaimedWindows = payload.windows.filter(
-      (w) => !claimedWindows.has(w.tmuxWindow)
-    )
+    const staleCheckNow = Date.now()
+    const unclaimedWindows = payload.windows.filter((w) => {
+      const owner = claimOwnerByWindow.get(w.tmuxWindow)
+      return !owner || isWindowClaimStale(owner.lastActivityAt, staleCheckNow)
+    })
 
     const entriesToMatch = getEntriesNeedingMatch(entries, payload.sessions, {
       minTokens: payload.minTokensForMatch ?? 0,
