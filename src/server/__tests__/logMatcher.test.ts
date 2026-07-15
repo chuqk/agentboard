@@ -237,6 +237,53 @@ describe('logMatcher', () => {
     await fs.rm(tempDir, { recursive: true, force: true })
   })
 
+  test('extractLastUserMessageFromLog caps huge headless-pipeline prompts at 1000 chars', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentboard-last-user-'))
+    const logPath = path.join(tempDir, 'session.jsonl')
+
+    // Headless pipeline sessions (claude -p) record their entire prompt as the
+    // user message — 600KB+ observed in production, with embedded base64 images.
+    // Read options mirror logMatchWorker's LAST_USER_MESSAGE_READ_OPTIONS, whose
+    // 2MB progressive read is what let those entries through unclamped.
+    const hugePrompt = 'あなたは自己モデル抽出エンジンです。'.repeat(12_000) // ~648KB UTF-8
+    await fs.writeFile(
+      logPath,
+      JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: hugePrompt },
+        timestamp: '2026-07-15T10:00:00.000Z',
+      })
+    )
+
+    const extracted = extractLastUserMessageFromLog(logPath, {
+      lineLimit: 200,
+      byteLimit: 32 * 1024,
+      maxByteLimit: 2 * 1024 * 1024,
+    })
+    expect(extracted).not.toBeNull()
+    expect(extracted!.length).toBe(1001) // 1000 chars + ellipsis
+    expect(extracted!.endsWith('…')).toBe(true)
+    expect(extracted!.startsWith('あなたは自己モデル抽出エンジンです。')).toBe(true)
+    await fs.rm(tempDir, { recursive: true, force: true })
+  })
+
+  test('extractLastUserMessageFromLog leaves short messages untouched', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentboard-last-user-'))
+    const logPath = path.join(tempDir, 'session.jsonl')
+
+    await fs.writeFile(
+      logPath,
+      JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: 'short message' },
+        timestamp: '2026-07-15T10:00:00.000Z',
+      })
+    )
+
+    expect(extractLastUserMessageFromLog(logPath)).toBe('short message')
+    await fs.rm(tempDir, { recursive: true, force: true })
+  })
+
   test('extractLastUserMessageFromLog skips Claude <local-command-stdout> auto-compact entries and falls back to prior real user message', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentboard-last-user-'))
     const logPath = path.join(tempDir, 'session.jsonl')

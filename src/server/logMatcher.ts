@@ -1547,12 +1547,24 @@ function extractLastConversationFromLog(
   return lastPair
 }
 
+/**
+ * lastUserMessage is a display field (session list preview, push payload).
+ * Headless pipeline sessions (e.g. buddy's card extraction) record huge
+ * prompts — 600KB+ with embedded base64 images — as the "user message" in
+ * their JSONL. Cap what we surface so a single entry can't flood the DB,
+ * WebSocket frames, and notifications.
+ */
+const MAX_LAST_USER_MESSAGE_LENGTH = 1000
+
 export function extractLastUserMessageFromLog(
   logPath: string,
   logRead: Partial<LogReadOptions> = {}
 ): string | null {
   const { user } = extractLastConversationFromLog(logPath, logRead)
-  return user && user.trim() ? user.trim() : null
+  const trimmed = user?.trim()
+  if (!trimmed) return null
+  if (trimmed.length <= MAX_LAST_USER_MESSAGE_LENGTH) return trimmed
+  return `${trimmed.slice(0, MAX_LAST_USER_MESSAGE_LENGTH)}…`
 }
 
 /**
