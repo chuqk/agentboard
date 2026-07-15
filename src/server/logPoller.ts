@@ -293,13 +293,25 @@ export class LogPoller {
       ]
       const excludedProjects = config.excludeProjects ?? []
 
-      // Build orphan candidates - sessions without active windows
+      // Build orphan candidates - sessions without active windows.
+      // Skip orphans older than the History window: they can't be shown or woken from
+      // the UI anyway, and rematching them costs a full-content token count per file.
+      // With years of transcripts accumulated this was ~11k files / minutes of I/O per
+      // cold start (2026-07-12 probe-kill loop incident); recent-only keeps it in seconds.
+      const orphanActivityCutoff =
+        Date.now() - config.historySessionMaxAgeHours * 60 * 60 * 1000
       const orphanCandidates: OrphanCandidate[] = []
+      let staleOrphansSkipped = 0
       for (const record of sessionRecords) {
         if (record.currentWindow) continue
         if (!canAttemptDormantRematch(record)) continue
         const logFilePath = record.logFilePath
         if (!logFilePath) continue
+        const lastActivity = Date.parse(record.lastActivityAt)
+        if (Number.isFinite(lastActivity) && lastActivity < orphanActivityCutoff) {
+          staleOrphansSkipped += 1
+          continue
+        }
         // Skip sessions from excluded project directories
         // Use "<empty>" as a special marker to exclude sessions with no project path
         if (excludedProjects.length > 0) {
@@ -320,11 +332,14 @@ export class LogPoller {
       }
 
       if (orphanCandidates.length === 0) {
-        logger.info('orphan_rematch_skip', { reason: 'no_orphans' })
+        logger.info('orphan_rematch_skip', { reason: 'no_orphans', staleOrphansSkipped })
         return
       }
 
-      logger.info('orphan_rematch_start', { orphanCount: orphanCandidates.length })
+      logger.info('orphan_rematch_start', {
+        orphanCount: orphanCandidates.length,
+        staleOrphansSkipped,
+      })
 
       // Run orphan rematch on dedicated worker - doesn't block regular polling
       const sessions: SessionSnapshot[] = sessionRecords.map((session) => ({

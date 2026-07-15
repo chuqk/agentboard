@@ -354,6 +354,70 @@ describe('LogPoller', () => {
     db.close()
   })
 
+  test('skips orphan rematch for sessions older than the history window', async () => {
+    const db = initDatabase({ path: ':memory:' })
+    const registry = new SessionRegistry()
+    registry.replaceSessions([baseSession])
+
+    const projectPath = baseSession.projectPath
+    const encoded = encodeProjectPath(projectPath)
+    const logDir = path.join(
+      process.env.CLAUDE_CONFIG_DIR ?? '',
+      'projects',
+      encoded
+    )
+    await fs.mkdir(logDir, { recursive: true })
+
+    const tokens = Array.from({ length: 60 }, (_, i) => `token${i}`).join(' ')
+    const logPath = path.join(logDir, 'stale-orphan.jsonl')
+    const userLine = buildUserLogEntry(tokens, {
+      sessionId: 'stale-orphan',
+      cwd: projectPath,
+    })
+    await fs.writeFile(logPath, `${userLine}\n`)
+    // Window content does NOT match the log — the only claim path left is the
+    // name fallback, which runs exclusively inside the orphan rematch under test
+    setTmuxOutput(baseSession.tmuxWindow, buildLastExchangeOutput('unrelated content here'))
+
+    const staleActivity = new Date(
+      Date.now() - 30 * 24 * 60 * 60 * 1000
+    ).toISOString()
+    db.insertSession({
+      sessionId: 'stale-orphan',
+      logFilePath: logPath,
+      projectPath,
+      slug: null,
+      agentType: 'claude',
+      // Same displayName as the unclaimed window: without the age filter the
+      // name fallback would claim it
+      displayName: baseSession.name,
+      createdAt: staleActivity,
+      lastActivityAt: staleActivity,
+      lastUserMessage: null,
+      currentWindow: null,
+      isPinned: false,
+      lastResumeError: null,
+      lastKnownLogSize: 0,
+      isCodexExec: false,
+      launchCommand: null,
+    })
+
+    const activated: Array<{ sessionId: string; window: string }> = []
+    const poller = new LogPoller(db, registry, {
+      matchWorkerClient: new InlineMatchWorkerClient(),
+      onSessionActivated: (sessionId, window) => activated.push({ sessionId, window }),
+    })
+
+    await poller.pollOnce()
+    await poller.waitForOrphanRematch()
+
+    const record = db.getSessionById('stale-orphan')
+    expect(record?.currentWindow).toBeNull()
+    expect(activated).toEqual([])
+
+    db.close()
+  })
+
   test('orphan-rematches hibernating sessions with pending wake marker', async () => {
     const db = initDatabase({ path: ':memory:' })
     const registry = new SessionRegistry()
