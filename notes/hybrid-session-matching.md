@@ -411,3 +411,23 @@ Updated events:
 - `1c62d44` - Added `windowsByName` recovery in hydration
 - `9953322` - Removed name recovery, added `verifyAssociations` (content-only)
 - `3f2eba6` - Added `excludeLogPaths` to prevent cross-session pollution
+
+---
+
+## Update 2026-07-15: Stale Claim Stealing (`b09ec0e`)
+
+The "skip if window already claimed" rule above is no longer absolute. The
+hybrid design had a deadlock: a fresh agent restarted in the same tmux window
+(e.g. after /wrap) could never take the window over — the old claim survived
+verification via the name fallback (window name unchanged), while the match
+worker excluded claimed windows from content matching entirely. The
+association froze on the dead log indefinitely (observed: 4 days), freezing
+lastUserMessage / transcript resolution / wake targets with it.
+
+Now a claim whose owning session's log has been silent past
+`STALE_WINDOW_CLAIM_MS` (10 min, `logMatchGate.ts`) stays in the content-match
+pool, and `claimWindowEvictingStaleOccupant()` (`logPoller.ts`) evicts the
+occupant when the claimant's log is strictly newer AND content-matched the
+window. Content match remains the safety: an idle-but-live window still shows
+its own conversation, so it can't be stolen. The name fallback path still
+never steals — names alone are not evidence.
